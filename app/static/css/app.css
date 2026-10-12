@@ -1,0 +1,6 @@
+body { background: #f5f7fa; }
+.touch-target { min-height: 44px; display: inline-flex; align-items: center; }
+.border-dashed { border-style: dashed; }
+@media (max-width: 575.98px) {
+  .display-6 { font-size: 1.75rem; }
+}

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% macro pending(title) %}
+<div class="col-12 col-md-6 col-xl-3">
+  <div class="card h-100 text-bg-light border-dashed">
+    <div class="card-body">
+      <h2 class="h6 text-muted">{{ title }}</h2>
+      <p class="mb-0 text-muted small">Not available yet &mdash; enabled once its records are built (Phase 2).</p>
+    </div>
+  </div>
+</div>
+{% endmacro %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+  <h1 class="h3 mb-0">Dashboard</h1>
+  <a class="btn btn-outline-primary touch-target" href="{{ url_for('properties.list_properties') }}">View properties</a>
+</div>
+
+<h2 class="h5">Portfolio</h2>
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="card h-100"><div class="card-body">
+      <div class="text-muted small">Active properties</div>
+      <div class="display-6" data-testid="active-properties">{{ summary.active_properties }}</div>
+    </div></div>
+  </div>
+  {% for label, count in summary.by_occupancy if count %}
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="card h-100"><div class="card-body">
+      <div class="text-muted small">{{ label }}</div>
+      <div class="display-6">{{ count }}</div>
+    </div></div>
+  </div>
+  {% endfor %}
+</div>
+
+<h2 class="h5">Income</h2>
+<div class="row g-3 mb-4">
+  {{ pending("Rent expected this month") }}{{ pending("Rent received this month") }}
+  {{ pending("Outstanding rent") }}{{ pending("Other recorded income") }}
+</div>
+<h2 class="h5">Expenses</h2>
+<div class="row g-3 mb-4">
+  {{ pending("Bills due this month") }}{{ pending("Overdue bills") }}
+  {{ pending("Actual payments made this month") }}{{ pending("Property expenses") }}
+</div>
+<h2 class="h5">Upcoming payments</h2>
+<div class="row g-3 mb-4">
+  {{ pending("Due within 7 days") }}{{ pending("Due within 30 days") }}
+</div>
+{% endblock %}
