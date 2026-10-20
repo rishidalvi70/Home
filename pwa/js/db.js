@@ -96,7 +96,7 @@ export function createDB(name = "home-finance") {
       if (!existing.length) {
         await api.batch(["properties", "members"], async (tx) => {
           for (const [i, [n, status]] of INITIAL_PROPERTIES.entries())
-            await tx.put("properties", { name: n, occupancyStatus: status, rentCollectedBy: "me", sortOrder: i + 1, archivedAt: null });
+            await tx.put("properties", { name: n, propertyKind: "mhada", occupancyStatus: status, rentCollectedBy: "me", sortOrder: i + 1, archivedAt: null });
           for (const m of INITIAL_MEMBERS) await tx.put("members", { name: m, isActive: true });
         });
       }

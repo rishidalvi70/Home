@@ -1,6 +1,7 @@
 import { db } from "../db.js";
 import { BILL_CATEGORIES, L, RESPONSIBLE, TENANT_PAYMENT_STATES } from "../constants.js";
 import { billOutstanding, billPaid, billStatus, myShare } from "../domain/bills.js";
+import { billCascade, describe, total } from "../domain/cascade.js";
 import { formatDate, todayISO } from "../lib/dates.js";
 import { html } from "../lib/html.js";
 import { inr, sum } from "../lib/money.js";
@@ -99,7 +100,7 @@ export async function editBill({ params }) {
     async onSubmit(v) { await db.put("billPayments", { billId: id, amount: v.amount, paidOn: v.paidOn, method: v.method, reference: v.reference, notes: v.notes }); toast("Payment recorded."); refresh(); } });
   const canPay = myShare(bill) > 0 && !bill.isCancelled;
   return { title: bill.name, html: html`${pageHeader(bill.name, `${props.get(bill.propertyId)?.name} · ${L.category[bill.category]}`, html`
-      <a class="btn btn-outline-secondary" href="#/bills"><i class="bi bi-arrow-left"></i> All bills</a>${!pays.length ? actionBtn("delete-bill", "Delete", { id }, "btn btn-outline-danger", "trash") : ""}`)}
+      <a class="btn btn-outline-secondary" href="#/bills"><i class="bi bi-arrow-left"></i> All bills</a>${actionBtn("delete-bill", "Delete", { id }, "btn btn-outline-danger", "trash")}`)}
     <div class="row g-3"><div class="col-12 col-xl-7"><div class="card"><div class="card-body">${formHtml(billSpec(snap, bill))}</div></div></div>
     <div class="col-12 col-xl-5">
       <div class="mb-3">${card(html`Status ${badge(status)}`, html`<div class="card-body">${kv([
@@ -113,10 +114,12 @@ export async function editBill({ params }) {
 }
 
 actions["delete-bill"] = async ({ id }) => {
-  const pays = (await db.all("billPayments")).filter((p) => p.billId === Number(id));
-  if (pays.length) { toast("This bill has payments recorded. Mark it cancelled instead, or delete the payments first.", "danger"); return; }
-  if (!confirm("Delete this bill?")) return;
-  await db.remove("bills", Number(id)); toast("Bill deleted.", "info"); navigate("/bills");
+  const bid = Number(id);
+  const snap = await db.loadAll();
+  const cascade = billCascade(snap, bid);
+  if (!confirm(total(cascade) ? `Delete this bill and ${describe(cascade)}? This can't be undone. (Mark it Cancelled instead to keep it on record.)` : "Delete this bill?")) return;
+  await db.batch(["bills", "billPayments"], async (tx) => { for (const x of cascade.billPayments) await tx.remove("billPayments", x); await tx.remove("bills", bid); });
+  toast("Bill deleted.", "info"); navigate("/bills");
 };
 actions["delete-bill-payment"] = async ({ id }) => {
   if (!confirm("Delete this payment?")) return;
