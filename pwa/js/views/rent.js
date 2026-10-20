@@ -1,11 +1,12 @@
 import { db } from "../db.js";
 import { L } from "../constants.js";
-import { obOutstanding, obReceived, obStatus, obligationsToCreate, previewObligations } from "../domain/rent.js";
-import { addMonths, formatDate, monthLabel, parseMonth, todayISO } from "../lib/dates.js";
+import { obligationCascade, describe, total } from "../domain/cascade.js";
+import { obOutstanding, obReceived, obStatus, obligationsToCreate, previewObligations, rentFor } from "../domain/rent.js";
+import { addMonths, dueDateInMonth, formatDate, monthLabel, monthStart, parseMonth, todayISO } from "../lib/dates.js";
 import { html } from "../lib/html.js";
 import { inr, sum } from "../lib/money.js";
 import { actions, formHtml, navigate, refresh, toast } from "../ui/core.js";
-import { actionBtn, badge, byId, card, empty, kv, monthNav, pageHeader, responsive, stat, tableCard } from "./common.js";
+import { actionBtn, badge, byId, card, empty, monthNav, pageHeader, responsive, stat, tableCard } from "./common.js";
 import { notFound } from "./properties.js";
 import { paymentSpec } from "./payments.js";
 
@@ -18,7 +19,7 @@ export async function ledger({ query }) {
   const live = rows.filter((o) => !o.isCancelled);
   const today = todayISO();
   const m = start.slice(0, 7);
-  return { title: "Rent", html: html`${pageHeader("Rent", "Monthly rent owed and received", html`<a class="btn btn-primary" href="#/rent/generate?month=${m}"><i class="bi bi-magic"></i> Generate for ${monthLabel(start).slice(0, 3)} ${start.slice(0, 4)}</a>`)}
+  return { title: "Rent", html: html`${pageHeader("Rent", "Monthly rent owed and received", html`<a class="btn btn-outline-secondary" href="#/rent/new?month=${m}"><i class="bi bi-plus-lg"></i> Add old rent record</a><a class="btn btn-primary" href="#/rent/generate?month=${m}"><i class="bi bi-magic"></i> Generate for ${monthLabel(start).slice(0, 3)} ${start.slice(0, 4)}</a>`)}
     ${monthNav(monthLabel(start), `#/rent?month=${addMonths(start, -1).slice(0, 7)}`, `#/rent?month=${addMonths(start, 1).slice(0, 7)}`)}
     <div class="row g-3 mb-3">
       <div class="col-12 col-md-4">${stat("Expected", inr(sum(live, (o) => o.expectedAmount)), "calendar-check", "primary")}</div>
@@ -46,6 +47,52 @@ export async function generate({ query }) {
     ${rows.length ? html`<button class="btn btn-primary mt-3" type="button" data-action="create-obligations" data-month="${start}"><i class="bi bi-check2"></i> Create selected rent records</button>` : ""}</div>` };
 }
 
+/** Add a rent record by hand - for old months, former tenants, or odd amounts. Optionally with what was received. */
+export async function newObligation({ query }) {
+  const snap = await db.loadAll();
+  const props = byId(snap.properties);
+  if (!snap.tenants.length) return { title: "Add old rent", html: html`${pageHeader("Add old rent record")}<div class="card card-body">${empty("Add a tenant to a room first (Rooms & tenants → open a room → Add tenant). Former tenants are fine: untick “Current tenant”.")}</div>` };
+  const tenants = [...snap.tenants].sort((a, b) => (props.get(a.propertyId)?.name || "").localeCompare(props.get(b.propertyId)?.name || "") || Number(b.isActive) - Number(a.isActive));
+  const month = query.get("month") ? parseMonth(query.get("month")) : monthStart(todayISO());
+  const spec = { id: "old-rent", cancelHref: "#/rent",
+    fields: [
+      { name: "tenantId", label: "Tenant", type: "select", cast: "int", required: true, options: tenants.map((t) => [t.id, `${props.get(t.propertyId)?.name} – ${t.name}${t.isActive ? "" : " (former)"}`]) },
+      { name: "periodStart", label: "Rent month (pick any date in that month)", type: "date", required: true },
+      { name: "expectedAmount", label: "Rent for that month (₹)", type: "money", hint: "Leave blank to use the rent in force that month." },
+      { name: "dueDate", label: "Due date", type: "date", hint: "Leave blank to use the tenant's due day." },
+      { name: "receivedAmount", label: "Amount already received (₹)", type: "money", hint: "For old months that were paid. Leave blank if nothing was received." },
+      { name: "receivedOn", label: "Received on", type: "date", hint: "Defaults to the due date." },
+    ],
+    values: { tenantId: Number(query.get("tenant")) || tenants[0].id, periodStart: month },
+    validate(v) {
+      const e = {};
+      const period = monthStart(v.periodStart);
+      if (snap.obligations.some((o) => o.tenantId === v.tenantId && o.periodStart === period)) e.periodStart = "There is already a rent record for this tenant and month.";
+      const tenant = snap.tenants.find((t) => t.id === v.tenantId);
+      const expected = v.expectedAmount ?? rentFor(tenant, snap.revisions, period);
+      if (v.receivedAmount != null) {
+        if (v.receivedAmount <= 0) e.receivedAmount = "Must be more than zero.";
+        else if (v.receivedAmount > expected) e.receivedAmount = `That is more than the rent for the month (${inr(expected, 2)}).`;
+      }
+      const due = v.dueDate || dueDateInMonth(period, tenant.rentDueDay);
+      if ((v.receivedOn || due) > todayISO() && v.receivedAmount != null) e.receivedOn = "A received date can't be in the future.";
+      return e;
+    },
+    async onSubmit(v) {
+      const tenant = snap.tenants.find((t) => t.id === v.tenantId);
+      const period = monthStart(v.periodStart);
+      const dueDate = v.dueDate || dueDateInMonth(period, tenant.rentDueDay);
+      let id;
+      await db.batch(["obligations", "rentPayments"], async (tx) => {
+        id = await tx.put("obligations", { propertyId: tenant.propertyId, tenantId: tenant.id, periodStart: period,
+          expectedAmount: v.expectedAmount ?? rentFor(tenant, snap.revisions, period), dueDate, isCancelled: false, notes: null });
+        if (v.receivedAmount != null) await tx.put("rentPayments", { obligationId: id, amount: v.receivedAmount, paidOn: v.receivedOn || dueDate, method: null, reference: null, notes: "Added as an old entry" });
+      });
+      toast("Rent record added."); navigate(`/rent/${id}`);
+    } };
+  return { title: "Add old rent", html: html`${pageHeader("Add old rent record", "For earlier months, former tenants, or amounts that differ from the usual rent.")}<div class="card"><div class="card-body">${formHtml(spec)}</div></div>` };
+}
+
 export async function obligation({ params }) {
   const id = Number(params.id);
   const snap = await db.loadAll();
@@ -61,7 +108,8 @@ export async function obligation({ params }) {
     } });
   return { title: `Rent ${prop?.name}`, html: html`${pageHeader(`${prop?.name} – ${monthLabel(ob.periodStart)}`, `Tenant: ${tenant?.name}`, html`
       <a class="btn btn-outline-secondary" href="#/rent?month=${ob.periodStart.slice(0, 7)}"><i class="bi bi-arrow-left"></i> Ledger</a>
-      ${actionBtn("toggle-obligation", ob.isCancelled ? "Reinstate" : "Cancel this month", { id }, "btn btn-outline-secondary")}`)}
+      ${actionBtn("toggle-obligation", ob.isCancelled ? "Reinstate" : "Cancel this month", { id }, "btn btn-outline-secondary")}
+      ${actionBtn("delete-obligation", "Delete", { id }, "btn btn-outline-danger", "trash")}`)}
     <div class="row g-3 mb-3">
       <div class="col-6 col-md-3">${stat("Expected", inr(ob.expectedAmount), "calendar-check", "primary", `Due ${formatDate(ob.dueDate)}`)}</div>
       <div class="col-6 col-md-3">${stat("Received", inr(obReceived(ob, snap.rentPayments)), "cash-coin", "success")}</div>
@@ -91,4 +139,14 @@ actions["toggle-obligation"] = async ({ id }) => {
 actions["delete-rent-payment"] = async ({ id }) => {
   if (!confirm("Delete this payment?")) return;
   await db.remove("rentPayments", Number(id)); toast("Payment removed.", "info"); refresh();
+};
+actions["delete-obligation"] = async ({ id }) => {
+  const oid = Number(id);
+  const snap = await db.loadAll();
+  const ob = snap.obligations.find((o) => o.id === oid);
+  const cascade = obligationCascade(snap, oid);
+  const msg = total(cascade) ? `Delete this rent record and ${describe(cascade)}? This can't be undone.` : "Delete this rent record?";
+  if (!confirm(msg)) return;
+  await db.batch(["obligations", "rentPayments"], async (tx) => { for (const x of cascade.rentPayments) await tx.remove("rentPayments", x); await tx.remove("obligations", oid); });
+  toast("Rent record deleted.", "info"); navigate(`/rent?month=${ob.periodStart.slice(0, 7)}`);
 };

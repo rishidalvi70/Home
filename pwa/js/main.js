@@ -22,6 +22,7 @@ route("/tenants/:id/edit", (c) => props.tenantForm(c, true));
 route("/tenants/:id/increment", props.incrementForm);
 route("/rent", rent.ledger);
 route("/rent/generate", rent.generate);
+route("/rent/new", rent.newObligation);
 route("/rent/:id", rent.obligation);
 route("/bills", bills.list);
 route("/bills/new", bills.newBill);

@@ -67,7 +67,15 @@ def page(ctx):
     pg.errors = []
     pg.on("console", lambda m: pg.errors.append(m.text) if m.type == "error" else None)
     pg.on("pageerror", lambda e: pg.errors.append(str(e)))
-    pg.on("dialog", lambda d: d.accept("ERASE") if d.type == "prompt" else d.accept())
+    pg.prompt_answer = None  # tests can set a wrong answer to prove a delete is refused
+
+    def on_dialog(d):
+        if d.type == "prompt":
+            d.accept(pg.prompt_answer if pg.prompt_answer is not None else ("DELETE" if "DELETE" in d.message else "ERASE"))
+        else:
+            d.accept()
+
+    pg.on("dialog", on_dialog)
     return pg
 
 
@@ -97,6 +105,7 @@ def toast_text(pg):
 
 
 def submit(pg, form_id):
+    pg.evaluate("document.getElementById('toasts').innerHTML = ''")  # so the next toast we wait for is the new one
     pg.click(f'form[data-form="{form_id}"] button[type=submit]')
 
 
@@ -287,3 +296,148 @@ def test_text_is_escaped(page):
     go(page, "/properties")
     assert page.evaluate("window.__xss") is None
     expect(page.locator("body")).to_contain_text('<img src=x onerror="window.__xss=1">')
+
+
+def test_mhada_or_private_form(page):
+    go(page, "/properties/new")
+    expect(page.locator("#property-propertyKind")).to_have_value("mhada")
+    for f in ("mhadaRoomNo", "wardName", "wardNumber"):
+        expect(page.locator(f"#property-{f}")).to_be_visible()
+    page.select_option("#property-propertyKind", "private")
+    for f in ("mhadaRoomNo", "wardName", "wardNumber"):
+        expect(page.locator(f"#property-{f}")).to_be_hidden()
+    expect(page.locator("#property-address")).to_be_visible()
+    page.fill("#property-name", "Shop on Main Road")
+    page.fill("#property-address", "12 Main Road, Dadar\nMumbai 400014")
+    submit(page, "property")
+    expect(page.locator("#toasts")).to_contain_text("Added Shop on Main Road.")
+    body = page.locator("#view")
+    expect(body).to_contain_text("Private")
+    expect(body).to_contain_text("12 Main Road, Dadar")
+    expect(body).not_to_contain_text("MHADA room no.")
+    expect(body).not_to_contain_text("Ward")
+
+    # MHADA details typed, then switched to Private: they are cleared, not kept
+    page.click('a:has-text("Edit")')
+    page.select_option("#property-propertyKind", "mhada")
+    page.fill("#property-mhadaRoomNo", "B-12")
+    page.fill("#property-wardName", "G-North")
+    page.select_option("#property-propertyKind", "private")
+    submit(page, "property")
+    expect(page.locator("#toasts")).to_contain_text("Property updated.")
+    page.click('a:has-text("Edit")')
+    page.select_option("#property-propertyKind", "mhada")
+    assert page.input_value("#property-mhadaRoomNo") == "" and page.input_value("#property-wardName") == ""
+
+    # list cards show the right identifying details
+    go(page, "/properties")
+    card = page.locator('.card:has-text("Shop on Main Road")')
+    expect(card).to_contain_text("12 Main Road, Dadar")
+    expect(card).to_contain_text("Private")
+    expect(page.locator('.card:has-text("Room 2")')).to_contain_text("MHADA no. not added")
+
+    # a room created before categories existed opens as MHADA with its fields visible
+    go(page, "/properties/2/edit")
+    expect(page.locator("#property-propertyKind")).to_have_value("mhada")
+    expect(page.locator("#property-mhadaRoomNo")).to_be_visible()
+
+
+def test_old_entries_and_deleting_rooms(page):
+    # a tenant who has since left, with an old month of rent entered by hand
+    go(page, "/properties/2/tenants/new")
+    page.fill("#tenant-name", "Old Tenant")
+    page.fill("#tenant-monthlyRent", "8000")
+    page.fill("#tenant-rentDueDay", "5")
+    page.fill("#tenant-startDate", "2025-01-01")
+    submit(page, "tenant")
+    expect(page.locator("#toasts")).to_contain_text("Tenant added.")
+    page.click('[data-action="end-tenancy"]')
+    expect(page.locator("#toasts")).to_contain_text("Tenancy ended")
+    expect(page.locator("#view")).to_contain_text("Former")
+
+    go(page, "/rent/new?tenant=1")
+    expect(page.locator("#old-rent-tenantId")).to_contain_text("Old Tenant (former)")
+    page.fill("#old-rent-periodStart", "2025-06-15")
+    page.fill("#old-rent-receivedAmount", "9999")
+    page.fill("#old-rent-receivedOn", "2025-06-07")
+    submit(page, "old-rent")
+    expect(page.locator('form[data-form="old-rent"]')).to_contain_text("more than the rent for the month")
+    page.fill("#old-rent-receivedAmount", "8000")
+    submit(page, "old-rent")
+    expect(page.locator("#toasts")).to_contain_text("Rent record added.")
+    assert stat_value(page, "Received") == "\u20b98,000" and stat_value(page, "Outstanding") == "\u20b90"
+    go(page, "/rent/new?tenant=1&month=2025-06")
+    submit(page, "old-rent")
+    expect(page.locator('form[data-form="old-rent"]')).to_contain_text("already a rent record")
+    go(page, "/rent?month=2025-06")
+    expect(page.locator("#view")).to_contain_text("Old Tenant")
+    expect(page.locator("#view")).to_contain_text("Paid")
+
+    # a bill with a payment, and a connection, on the same room
+    go(page, "/bills/new?property=2")
+    page.fill("#bill-name", "Old light bill")
+    page.fill("#bill-amount", "1000")
+    submit(page, "bill")
+    expect(page.locator("#toasts")).to_contain_text("Bill added.")
+    page.fill("#bill-pay-amount", "400")
+    page.fill("#bill-pay-paidOn", "2025-06-10")
+    submit(page, "bill-pay")
+    expect(page.locator("#toasts")).to_contain_text("Payment recorded.")
+
+    # deleting the room needs the typed word; a wrong word deletes nothing
+    go(page, "/properties/2")
+    page.prompt_answer = "nope"
+    page.click('.page-actions [data-action="delete-property"]')
+    expect(page.locator("#toasts")).to_contain_text("Nothing was deleted.")
+    page.prompt_answer = None  # back to typing DELETE when asked
+    go(page, "/properties")
+    expect(page.locator('.card:has-text("Room 2")')).to_be_visible()
+    go(page, "/bills")
+    expect(page.locator("#view")).to_contain_text("Old light bill")
+
+    # delete the old rent record (and its payment) on its own
+    go(page, "/rent?month=2025-06")
+    page.click('a:has-text("Room 2")')
+    page.click('[data-action="delete-obligation"]')
+    expect(page.locator("#toasts")).to_contain_text("Rent record deleted.")
+    expect(page.locator("#view")).not_to_contain_text("Old Tenant")
+
+    # delete the tenant (no rent records left, so a plain confirm), then the bill (it has a payment)
+    go(page, "/properties/2")
+    page.click('[data-action="delete-tenant"]')
+    expect(page.locator("#toasts")).to_contain_text("Tenant deleted.")
+    go(page, "/bills")
+    page.click('a:has-text("Old light bill")')
+    page.click('.page-actions [data-action="delete-bill"]')
+    expect(page.locator("#toasts")).to_contain_text("Bill deleted.")
+
+    # an empty room, and a room full of records, both delete cleanly
+    go(page, "/properties/new")
+    page.fill("#property-name", "Scratch room")
+    submit(page, "property")
+    expect(page.locator("#toasts")).to_contain_text("Added Scratch room.")
+    page.click('.page-actions [data-action="delete-property"]')
+    expect(page.locator("#toasts")).to_contain_text("Scratch room deleted.")
+
+    go(page, "/properties/3/tenants/new")
+    page.fill("#tenant-name", "Room 3 Tenant")
+    page.fill("#tenant-monthlyRent", "6500")
+    page.fill("#tenant-rentDueDay", "5")
+    page.fill("#tenant-startDate", "2025-01-01")
+    submit(page, "tenant")
+    expect(page.locator("#toasts")).to_contain_text("Tenant added.")
+    go(page, "/rent/new?tenant=2")
+    page.fill("#old-rent-periodStart", "2025-03-01")
+    page.fill("#old-rent-receivedAmount", "6500")
+    submit(page, "old-rent")
+    expect(page.locator("#toasts")).to_contain_text("Rent record added.")
+    go(page, "/properties/3")
+    page.click('.page-actions [data-action="delete-property"]')
+    expect(page.locator("#toasts")).to_contain_text("Room 3 deleted.")
+    go(page, "/properties")
+    expect(page.locator('.card:has-text("Room 3")')).to_have_count(0)
+    go(page, "/rent?month=2025-03")
+    expect(page.locator("#view")).not_to_contain_text("Room 3 Tenant")
+    go(page, "/")
+    assert stat_value(page, "My rent still to collect") == "\u20b90"
+    assert page.errors == [], page.errors

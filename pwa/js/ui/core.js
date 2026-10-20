@@ -86,20 +86,26 @@ function displayValue(f, spec) {
   return v;
 }
 
+function visible(f, spec) {
+  return !f.showIf || String(displayValue({ name: f.showIf.field }, spec) ?? "") === String(f.showIf.value);
+}
+
 function fieldHtml(f, spec) {
   const id = `${spec.id}-${f.name}`;
   const err = spec.errors?.[f.name];
   const val = displayValue(f, spec);
-  const cols = f.type === "textarea" ? "col-12" : f.cols || "col-12 col-md-6";
   const cls = (base) => base + (err ? " is-invalid" : "");
   const attrs = html`id="${id}" name="${f.name}"`;
-  let control;
+  // Fields with showIf appear only while another field has a given value (e.g. MHADA details for MHADA rooms).
+  const cond = f.showIf ? html`data-show-if="${f.showIf.field}=${f.showIf.value}" ${visible(f, spec) ? "" : raw("hidden")}` : "";
   if (f.type === "checkbox") {
     const checked = spec.raw ? spec.raw[f.name] : spec.values?.[f.name] ?? f.default;
-    return html`<div class="${cols} d-flex align-items-end"><div class="form-check form-switch mb-2">
+    return html`<div class="${f.cols || "col-12 col-md-6"} d-flex align-items-end" ${cond}><div class="form-check form-switch mb-2">
       <input class="form-check-input" type="checkbox" ${attrs} ${checked ? raw("checked") : ""}>
       <label class="form-check-label" for="${id}">${f.label}</label></div></div>`;
   }
+  const cols = f.type === "textarea" ? "col-12" : f.cols || "col-12 col-md-6";
+  let control;
   if (f.type === "select") {
     control = html`<select class="${cls("form-select")}" ${attrs}>${f.options.map(([v, l]) =>
       html`<option value="${v ?? ""}" ${String(v ?? "") === String(val ?? "") ? raw("selected") : ""}>${l}</option>`)}</select>`;
@@ -107,10 +113,10 @@ function fieldHtml(f, spec) {
     control = html`<textarea class="${cls("form-control")}" rows="3" ${attrs}>${val}</textarea>`;
   } else {
     const type = f.type === "date" ? "date" : "text";
-    const mode = f.type === "money" ? 'inputmode="decimal"' : f.type === "number" ? 'inputmode="decimal"' : "";
+    const mode = f.type === "money" || f.type === "number" ? 'inputmode="decimal"' : "";
     control = html`<input class="${cls("form-control")}" type="${type}" ${raw(mode)} ${attrs} value="${val}" ${f.placeholder ? raw(`placeholder="${esc(f.placeholder)}"`) : ""} autocomplete="off">`;
   }
-  return html`<div class="${cols}"><label class="form-label" for="${id}">${f.label}${f.required ? html` <span class="text-danger">*</span>` : ""}</label>
+  return html`<div class="${cols}" ${cond}><label class="form-label" for="${id}">${f.label}${f.required ? html` <span class="text-danger">*</span>` : ""}</label>
     ${control}${err ? html`<div class="invalid-feedback d-block">${err}</div>` : f.hint ? html`<div class="form-text">${f.hint}</div>` : ""}</div>`;
 }
 
@@ -131,6 +137,10 @@ function collect(spec, formEl) {
   const fd = new FormData(formEl);
   const values = {}, raws = {}, errors = {};
   for (const f of spec.fields) {
+    if (f.showIf && String(fd.get(f.showIf.field) ?? "") !== String(f.showIf.value)) {
+      // Hidden by its condition: not validated, and saved empty so stale values don't linger.
+      values[f.name] = f.type === "checkbox" ? false : null; raws[f.name] = f.type === "checkbox" ? false : ""; continue;
+    }
     const text = f.type === "checkbox" ? null : String(fd.get(f.name) ?? "");
     raws[f.name] = f.type === "checkbox" ? fd.has(f.name) : text;
     let v;
@@ -206,6 +216,11 @@ export function startRouter() {
   document.addEventListener("change", (ev) => {
     const el = ev.target.closest?.("[data-filter]");
     if (el) setQuery(el.dataset.filter, el.value);
+    const form = ev.target.closest?.("form[data-form]");
+    if (form) for (const w of form.querySelectorAll("[data-show-if]")) {
+      const [field, value] = w.dataset.showIf.split("=");
+      w.hidden = String(form.elements[field]?.value ?? "") !== value;
+    }
   });
   window.addEventListener("hashchange", render);
   return render();

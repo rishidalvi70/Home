@@ -1,6 +1,6 @@
 // Service worker: caches the whole app so it opens and works with no internet.
 // VERSION and the file list between the markers are rewritten by `npm run build` (scripts/build-sw.mjs).
-const VERSION = "31b526e448a2";
+const VERSION = "544f5c479fb3";
 const CACHE = `home-finance-${VERSION}`;
 // ASSETS:START
 const ASSETS = [
@@ -15,6 +15,7 @@ const ASSETS = [
   "./js/constants.js",
   "./js/db.js",
   "./js/domain/bills.js",
+  "./js/domain/cascade.js",
   "./js/domain/commitments.js",
   "./js/domain/dashboard.js",
   "./js/domain/rent.js",

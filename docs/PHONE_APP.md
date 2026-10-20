@@ -24,6 +24,16 @@ Open the address in the phone's browser **once, with internet**. Then:
 
 After that it opens from the home screen like any app, **even in airplane mode**.
 
+## Rooms: MHADA or Private, edit, delete, old entries
+* **Category:** each room is **MHADA** (room number, ward name, ward number) or **Private** (just the address). Switching
+  a room to Private clears its MHADA details. Rooms made before this existed are treated as MHADA.
+* **Delete a room:** open the room → **Delete**. If it has records the app lists exactly what goes (tenants, rent records,
+  payments, bills…) and asks you to **type DELETE**. **Archive** instead hides the room and keeps all its history.
+* **Old entries:** **Rent → Add old rent record** adds any past month for any tenant, including **former tenants**, with an
+  optional "already received" amount. A former tenant is one you **End tenancy** on (or untick *Current tenant*).
+  Bills and payments accept past dates too.
+* **Delete tenants, rent records, bills:** each has a **Delete** button; when records hang off it you're told how many.
+
 ## 3. Your data and backups (important)
 Your records are stored **only inside that phone's browser storage**.
 
