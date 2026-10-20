@@ -22,13 +22,13 @@ export async function ledger({ query }) {
   return { title: "Rent", html: html`${pageHeader("Rent", "Monthly rent owed and received", html`<a class="btn btn-outline-secondary" href="#/rent/new?month=${m}"><i class="bi bi-plus-lg"></i> Add old rent record</a><a class="btn btn-primary" href="#/rent/generate?month=${m}"><i class="bi bi-magic"></i> Generate for ${monthLabel(start).slice(0, 3)} ${start.slice(0, 4)}</a>`)}
     ${monthNav(monthLabel(start), `#/rent?month=${addMonths(start, -1).slice(0, 7)}`, `#/rent?month=${addMonths(start, 1).slice(0, 7)}`)}
     <div class="row g-3 mb-3">
-      <div class="col-12 col-md-4">${stat("Expected", inr(sum(live, (o) => o.expectedAmount)), "calendar-check", "primary")}</div>
-      <div class="col-12 col-md-4">${stat("Received", inr(sum(live, (o) => obReceived(o, snap.rentPayments))), "cash-coin", "success")}</div>
-      <div class="col-12 col-md-4">${stat("Outstanding", inr(sum(live, (o) => obOutstanding(o, snap.rentPayments))), "hourglass-split", "danger")}</div></div>
+      <div class="col-4">${stat("Expected", inr(sum(live, (o) => o.expectedAmount)), "calendar-check", "primary")}</div>
+      <div class="col-4">${stat("Received", inr(sum(live, (o) => obReceived(o, snap.rentPayments))), "cash-coin", "success")}</div>
+      <div class="col-4">${stat("Outstanding", inr(sum(live, (o) => obOutstanding(o, snap.rentPayments))), "hourglass-split", "danger")}</div></div>
     ${tableCard(rows.length ? responsive(html`<table class="table table-hover"><thead><tr><th>Room</th><th>Tenant</th><th>Due</th><th>Expected</th><th>Received</th><th>Outstanding</th><th>Goes to</th><th>Status</th></tr></thead><tbody>
-      ${rows.map((o) => html`<tr><td><a href="#/rent/${o.id}">${props.get(o.propertyId)?.name}</a></td><td>${tenants.get(o.tenantId)?.name}</td><td>${formatDate(o.dueDate)}</td>
+      ${rows.map((o) => html`<tr><td><a href="#/rent/${o.id}">${props.get(o.propertyId)?.name}</a>${obOutstanding(o, snap.rentPayments) ? html`<div class="mt-1">${actionBtn("mark-received", "Received", { id: o.id }, "btn btn-sm btn-success", "check2")}</div>` : ""}</td><td>${tenants.get(o.tenantId)?.name}</td><td>${formatDate(o.dueDate)}</td>
         <td>${inr(o.expectedAmount)}</td><td>${inr(obReceived(o, snap.rentPayments))}</td><td class="${obOutstanding(o, snap.rentPayments) ? "money-neg" : ""}">${inr(obOutstanding(o, snap.rentPayments))}</td>
-        <td>${L.collector[props.get(o.propertyId)?.rentCollectedBy]}</td><td>${badge(obStatus(o, snap.rentPayments, today))}</td></tr>`)}</tbody></table>`)
+        <td>${L.collector[props.get(o.propertyId)?.rentCollectedBy] || "Me"}</td><td>${badge(obStatus(o, snap.rentPayments, today))}</td></tr>`)}</tbody></table>`)
       : html`<div class="card-body">${empty("No rent records for this month yet. Use “Generate” to review and create them.")}</div>`)}` };
 }
 
@@ -108,6 +108,7 @@ export async function obligation({ params }) {
     } });
   return { title: `Rent ${prop?.name}`, html: html`${pageHeader(`${prop?.name} – ${monthLabel(ob.periodStart)}`, `Tenant: ${tenant?.name}`, html`
       <a class="btn btn-outline-secondary" href="#/rent?month=${ob.periodStart.slice(0, 7)}"><i class="bi bi-arrow-left"></i> Ledger</a>
+      ${out && !ob.isCancelled ? actionBtn("mark-received", `Mark ${inr(out)} received`, { id }, "btn btn-success", "check2") : ""}
       ${actionBtn("toggle-obligation", ob.isCancelled ? "Reinstate" : "Cancel this month", { id }, "btn btn-outline-secondary")}
       ${actionBtn("delete-obligation", "Delete", { id }, "btn btn-outline-danger", "trash")}`)}
     <div class="row g-3 mb-3">
@@ -149,4 +150,16 @@ actions["delete-obligation"] = async ({ id }) => {
   if (!confirm(msg)) return;
   await db.batch(["obligations", "rentPayments"], async (tx) => { for (const x of cascade.rentPayments) await tx.remove("rentPayments", x); await tx.remove("obligations", oid); });
   toast("Rent record deleted.", "info"); navigate(`/rent?month=${ob.periodStart.slice(0, 7)}`);
+};
+/** One tap: the whole outstanding rent was received today. For another date or a part payment, use the form on the rent record. */
+actions["mark-received"] = async ({ id }) => {
+  const snap = await db.loadAll();
+  const ob = snap.obligations.find((o) => o.id === Number(id));
+  const out = obOutstanding(ob, snap.rentPayments);
+  if (!out) return;
+  const tenant = snap.tenants.find((t) => t.id === ob.tenantId), prop = snap.properties.find((p) => p.id === ob.propertyId);
+  const by = prop.rentCollectedBy && prop.rentCollectedBy !== "me" ? ` (collected by ${L.collector[prop.rentCollectedBy]})` : "";
+  if (!confirm(`Mark ${inr(out, 2)} from ${tenant.name} (${prop.name}, ${monthLabel(ob.periodStart)}) as received today${by}?\n\nFor a different date or a part payment, open the rent record instead.`)) return;
+  await db.put("rentPayments", { obligationId: ob.id, amount: out, paidOn: todayISO(), method: null, reference: null, notes: "Marked received" });
+  toast(`${inr(out)} marked as received.`); refresh();
 };

@@ -441,3 +441,64 @@ def test_old_entries_and_deleting_rooms(page):
     go(page, "/")
     assert stat_value(page, "My rent still to collect") == "\u20b90"
     assert page.errors == [], page.errors
+
+
+def test_no_rent_question_for_the_room_you_live_in(page):
+    go(page, "/properties/1/edit")  # Room 1 is seeded as self-occupied
+    expect(page.locator("#property-occupancyStatus")).to_have_value("self_occupied")
+    expect(page.locator("#property-rentCollectedBy")).to_be_hidden()
+    page.select_option("#property-occupancyStatus", "rented")
+    expect(page.locator("#property-rentCollectedBy")).to_be_visible()
+    page.select_option("#property-occupancyStatus", "under_development")
+    expect(page.locator("#property-rentCollectedBy")).to_be_hidden()
+    page.select_option("#property-occupancyStatus", "self_occupied")
+    submit(page, "property")
+    expect(page.locator("#toasts")).to_contain_text("Property updated.")
+    expect(page.locator("#view")).not_to_contain_text("Rent is collected by")
+    # a rented room still asks, and its answer is kept
+    go(page, "/properties/2/edit")
+    expect(page.locator("#property-rentCollectedBy")).to_be_visible()
+    page.select_option("#property-rentCollectedBy", "father")
+    submit(page, "property")
+    expect(page.locator("#toasts")).to_contain_text("Property updated.")
+    expect(page.locator("#view")).to_contain_text("Rent is collected by")
+    expect(page.locator("#view")).to_contain_text("Father")
+
+
+def test_mark_rent_received_in_one_tap_and_add_salary(page):
+    go(page, "/properties/2/tenants/new")
+    page.fill("#tenant-name", "Asha Patil")
+    page.fill("#tenant-monthlyRent", "8000")
+    page.fill("#tenant-rentDueDay", "1")
+    page.fill("#tenant-startDate", "2026-01-01")
+    submit(page, "tenant")
+    expect(page.locator("#toasts")).to_contain_text("Tenant added.")
+    month = TODAY.strftime("%Y-%m")
+    go(page, f"/rent/generate?month={month}")
+    page.click('[data-action="create-obligations"]')
+    expect(page.locator("#toasts")).to_contain_text("Created 1 rent record")
+    go(page, f"/rent?month={month}")
+    assert stat_value(page, "Outstanding") == "₹8,000"
+    page.click('[data-action="mark-received"]')
+    expect(page.locator("#toasts")).to_contain_text("marked as received")
+    expect(page.locator('.stat-card:has-text("Outstanding") .stat-value').first).to_have_text("₹0")
+    assert stat_value(page, "Received") == "₹8,000"
+    expect(page.locator("#view")).to_contain_text("Paid")
+    expect(page.locator('[data-action="mark-received"]')).to_have_count(0)
+
+    # salary: the dashboard button opens the form as a salary entry
+    go(page, "/")
+    page.click('a:has-text("Add salary")')
+    expect(page.locator("#income-kind")).to_have_value("salary")
+    assert page.input_value("#income-amount") == ""  # nothing to prefill yet
+    page.fill("#income-amount", "85000")
+    page.fill("#income-source", "Employer")
+    submit(page, "income")
+    expect(page.locator("#toasts")).to_contain_text("Income added.")
+    go(page, "/")
+    assert stat_value(page, "Money in") == "₹93,000"  # 85,000 salary + 8,000 rent I collect
+    # next month: the form is prefilled from the last salary
+    go(page, "/income/new?kind=salary")
+    assert page.input_value("#income-amount") == "85000" and page.input_value("#income-source") == "Employer"
+    expect(page.locator("#view")).to_contain_text("Prefilled from your last salary")
+    assert page.errors == [], page.errors

@@ -86,9 +86,12 @@ function displayValue(f, spec) {
   return v;
 }
 
-function visible(f, spec) {
-  return !f.showIf || String(displayValue({ name: f.showIf.field }, spec) ?? "") === String(f.showIf.value);
+/** showIf is {field, value} (show when equal) or {field, not: [values]} (show unless it is one of them). */
+export function shows(cond, current) {
+  const cur = String(current ?? "");
+  return cond.not ? !cond.not.map(String).includes(cur) : cur === String(cond.value);
 }
+const visible = (f, spec) => !f.showIf || shows(f.showIf, displayValue({ name: f.showIf.field }, spec));
 
 function fieldHtml(f, spec) {
   const id = `${spec.id}-${f.name}`;
@@ -97,7 +100,7 @@ function fieldHtml(f, spec) {
   const cls = (base) => base + (err ? " is-invalid" : "");
   const attrs = html`id="${id}" name="${f.name}"`;
   // Fields with showIf appear only while another field has a given value (e.g. MHADA details for MHADA rooms).
-  const cond = f.showIf ? html`data-show-if="${f.showIf.field}=${f.showIf.value}" ${visible(f, spec) ? "" : raw("hidden")}` : "";
+  const cond = f.showIf ? html`data-show-if="${JSON.stringify(f.showIf)}" ${visible(f, spec) ? "" : raw("hidden")}` : "";
   if (f.type === "checkbox") {
     const checked = spec.raw ? spec.raw[f.name] : spec.values?.[f.name] ?? f.default;
     return html`<div class="${f.cols || "col-12 col-md-6"} d-flex align-items-end" ${cond}><div class="form-check form-switch mb-2">
@@ -137,7 +140,7 @@ function collect(spec, formEl) {
   const fd = new FormData(formEl);
   const values = {}, raws = {}, errors = {};
   for (const f of spec.fields) {
-    if (f.showIf && String(fd.get(f.showIf.field) ?? "") !== String(f.showIf.value)) {
+    if (f.showIf && !shows(f.showIf, fd.get(f.showIf.field))) {
       // Hidden by its condition: not validated, and saved empty so stale values don't linger.
       values[f.name] = f.type === "checkbox" ? false : null; raws[f.name] = f.type === "checkbox" ? false : ""; continue;
     }
@@ -218,8 +221,8 @@ export function startRouter() {
     if (el) setQuery(el.dataset.filter, el.value);
     const form = ev.target.closest?.("form[data-form]");
     if (form) for (const w of form.querySelectorAll("[data-show-if]")) {
-      const [field, value] = w.dataset.showIf.split("=");
-      w.hidden = String(form.elements[field]?.value ?? "") !== value;
+      const cond = JSON.parse(w.dataset.showIf);
+      w.hidden = !shows(cond, form.elements[cond.field]?.value);
     }
   });
   window.addEventListener("hashchange", render);
