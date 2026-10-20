@@ -15,6 +15,8 @@ const area = (name, label) => ({ name, label, type: "textarea", max: 4000 });
 
 const KINDS = [["mhada", "MHADA"], ["private", "Private"]];
 const isMhada = { field: "propertyKind", value: "mhada" };
+/** Rooms nobody pays rent for - the "rent collected by" question doesn't apply. */
+const NO_RENT = ["self_occupied", "under_development"];
 
 export function propertyFields() {
   return [
@@ -26,13 +28,17 @@ export function propertyFields() {
     text("wardNumber", "Ward number", { max: 30, showIf: isMhada }),
     area("address", "Address"),
     text("propertyType", "Property type (room, flat, shop…)", { max: 60 }), text("ownership", "Ownership / relationship", { max: 120 }),
-    { name: "rentCollectedBy", label: "Rent is collected by", type: "select", options: COLLECTORS },
+    { name: "rentCollectedBy", label: "Rent is collected by", type: "select", options: COLLECTORS, showIf: { field: "occupancyStatus", not: NO_RENT } },
     { name: "areaSqft", label: "Area (sq ft)", type: "number", min: 0 }, area("spaceDetails", "Space / room details"), area("notes", "Notes"),
   ];
 }
 
 /** Private properties don't use MHADA details - never keep stale ones. */
-const cleanKind = (v) => (v.propertyKind === "private" ? { ...v, mhadaRoomNo: null, wardName: null, wardNumber: null } : v);
+const cleanKind = (v) => {
+  const out = v.propertyKind === "private" ? { ...v, mhadaRoomNo: null, wardName: null, wardNumber: null } : { ...v };
+  out.rentCollectedBy = out.rentCollectedBy || "me"; // hidden for rooms nobody rents; "me" is the safe default
+  return out;
+};
 
 /* ---------- list ---------- */
 export async function list({ query }) {
@@ -129,7 +135,7 @@ export async function detail({ params, query }) {
       ...(propertyKind(prop) === "mhada" ? [["MHADA room no.", prop.mhadaRoomNo || "—"], ["Ward", `${prop.wardName || "—"}${prop.wardNumber ? ` (${prop.wardNumber})` : ""}`]] : []),
       ["Address", prop.address || "—"], ["Property type", prop.propertyType || "—"], ["Ownership", prop.ownership || "—"],
       ["Area", prop.areaSqft ? `${prop.areaSqft} sq ft` : "—"], ["Space details", prop.spaceDetails || "—"],
-      ["Rent is collected by", L.collector[prop.rentCollectedBy]], ["Notes", prop.notes || "—"]])}</div>`, "h-100")}</div>
+      ...(NO_RENT.includes(prop.occupancyStatus) ? [] : [["Rent is collected by", L.collector[prop.rentCollectedBy] || "Me"]]), ["Notes", prop.notes || "—"]])}</div>`, "h-100")}</div>
     <div class="col-12 col-xl-6">${card(html`<div class="d-flex flex-wrap justify-content-between align-items-center gap-2"><span>Room report</span><div class="nav nav-pills small">
       ${[["all", "All time"], ["fy", "This FY"], ["month", "This month"]].map(([k, l]) => html`<a class="nav-link py-1 ${period === k ? "active" : ""}" href="#/properties/${id}?period=${k}">${l}</a>`)}</div></div>`, html`<div class="card-body">${kv([
       ["Rent expected", inr(r.rentExpected)], ["Rent received (cash)", inr(r.rentCashReceived)],
@@ -137,7 +143,7 @@ export async function detail({ params, query }) {
       ...Object.entries(r.ownerByCategory).map(([c, a]) => [html`<span class="ps-3 small">– ${c}</span>`, inr(a)]),
       ["Tenant/other paid (not mine)", inr(r.tenantPaidRecorded)],
       ["Net rental cash flow", html`<strong>${inr(r.netCashFlow)}</strong>`, r.netCashFlow < 0 ? "money-neg" : "money-pos"]])}
-      ${prop.rentCollectedBy !== "me" ? html`<p class="small text-muted mt-3 mb-0"><i class="bi bi-info-circle"></i> Rent for this room goes to ${L.collector[prop.rentCollectedBy]}, so it isn't counted in your income on the dashboard.</p>` : ""}</div>`, "h-100")}</div>
+      ${prop.rentCollectedBy && prop.rentCollectedBy !== "me" && !NO_RENT.includes(prop.occupancyStatus) ? html`<p class="small text-muted mt-3 mb-0"><i class="bi bi-info-circle"></i> Rent for this room goes to ${L.collector[prop.rentCollectedBy]}, so it isn't counted in your income on the dashboard.</p>` : ""}</div>`, "h-100")}</div>
 
     <div class="col-12">${card(html`<div class="d-flex justify-content-between align-items-center"><span>Electricity, gas & other connections</span><a class="btn btn-sm btn-outline-primary" href="#/properties/${id}/connections/new"><i class="bi bi-plus-lg"></i> Add</a></div>`,
       conns.length ? responsive(html`<table class="table"><thead><tr><th>Type</th><th>Provider</th><th>Nickname</th><th>Consumer no.</th><th>Meter no.</th><th></th></tr></thead><tbody>

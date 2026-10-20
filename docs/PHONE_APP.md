@@ -34,6 +34,15 @@ After that it opens from the home screen like any app, **even in airplane mode**
   Bills and payments accept past dates too.
 * **Delete tenants, rent records, bills:** each has a **Delete** button; when records hang off it you're told how many.
 
+## Rent received, and your salary
+* **Rent received:** **Rent** → find the month → tap the green **Received** button on the room's row (or **Mark … received**
+  on the rent record). It records the full amount as received **today**. For another date or a part payment, open the
+  rent record and use **Record a payment**. "Overdue" simply means the due date has passed and the rent isn't fully received.
+* **Rooms you live in** (or that are under development) don't ask who collects rent; the question appears when you set
+  the room to Rented, Vacant, etc.
+* **Salary:** tap **Add salary** on the dashboard (or **Salary & income → Add income**). The form is prefilled from your
+  last salary, so each month is: check the amount, Save. Your salary counts toward "Money in" and "Left so far".
+
 ## 3. Your data and backups (important)
 Your records are stored **only inside that phone's browser storage**.
 

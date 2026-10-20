@@ -73,3 +73,16 @@ test("html helper escapes by default", () => {
   assert.equal(esc(`"'`), "&quot;&#39;");
   assert.equal(html`${null}${false}${0}`.s, "0");
 });
+
+import { shows } from "../js/ui/core.js";
+
+test("conditional form fields: equals and not-in", () => {
+  assert.equal(shows({ field: "k", value: "mhada" }, "mhada"), true);
+  assert.equal(shows({ field: "k", value: "mhada" }, "private"), false);
+  assert.equal(shows({ field: "k", value: "mhada" }, null), false);
+  const hideForLiveIn = { field: "o", not: ["self_occupied", "under_development"] };
+  assert.equal(shows(hideForLiveIn, "self_occupied"), false);
+  assert.equal(shows(hideForLiveIn, "under_development"), false);
+  assert.equal(shows(hideForLiveIn, "rented"), true);
+  assert.equal(shows(hideForLiveIn, ""), true);
+});

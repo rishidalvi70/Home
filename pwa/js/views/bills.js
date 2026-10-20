@@ -32,9 +32,9 @@ export async function list({ query }) {
       ${sel("responsible", "Who pays", RESPONSIBLE, "Anyone")}${sel("status", "Status", STATUS_FILTERS.map((k) => [k, k.replace("_", " ")]), "Any")}
       <div><label class="form-label small mb-1">Search</label><input class="form-control" data-filter="q" value="${f.q}" placeholder="name, bill no, provider"></div></div>
     <div class="row g-3 mb-3">
-      <div class="col-12 col-md-4">${stat("My share of these bills", inr(sum(bills, myShare)), "receipt", "primary")}</div>
-      <div class="col-12 col-md-4">${stat("Paid by me", inr(sum(bills, (b) => billPaid(b, snap.billPayments))), "check2-circle", "success")}</div>
-      <div class="col-12 col-md-4">${stat("Still to pay", inr(sum(bills, (b) => billOutstanding(b, snap.billPayments))), "hourglass-split", "danger")}</div></div>
+      <div class="col-4">${stat("My share of these bills", inr(sum(bills, myShare)), "receipt", "primary")}</div>
+      <div class="col-4">${stat("Paid by me", inr(sum(bills, (b) => billPaid(b, snap.billPayments))), "check2-circle", "success")}</div>
+      <div class="col-4">${stat("Still to pay", inr(sum(bills, (b) => billOutstanding(b, snap.billPayments))), "hourglass-split", "danger")}</div></div>
     ${tableCard(bills.length ? responsive(html`<table class="table table-hover"><thead><tr><th>Bill</th><th>Room</th><th>Due</th><th>Amount</th><th>Who pays</th><th>I paid</th><th>Status</th></tr></thead><tbody>
       ${bills.map((b) => html`<tr><td><a href="#/bills/${b.id}">${b.name}</a><div class="small text-muted">${L.category[b.category]}${b.billNumber ? ` · #${b.billNumber}` : ""}${b.periodLabel ? ` · ${b.periodLabel}` : ""}</div></td>
         <td>${props.get(b.propertyId)?.name}</td><td>${formatDate(b.dueDate)}</td><td>${inr(b.amount)}</td>

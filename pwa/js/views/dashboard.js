@@ -23,6 +23,7 @@ export async function dashboard({ query }) {
   const c = s.chart;
   const body = html`
   ${pageHeader("Dashboard", "Actual money in and out – calculated from your records", html`
+    <a class="btn btn-primary" href="#/income/new?kind=salary"><i class="bi bi-plus-lg"></i> Add salary</a>
     <a class="btn btn-outline-secondary" href="#/?month=${s.prevMonth}" aria-label="Previous month"><i class="bi bi-chevron-left"></i></a>
     <strong class="px-1">${monthLabel(start)}</strong>
     <a class="btn btn-outline-secondary" href="#/?month=${s.nextMonth}" aria-label="Next month"><i class="bi bi-chevron-right"></i></a>`)}

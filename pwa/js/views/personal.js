@@ -189,7 +189,7 @@ actions["delete-commitment-payment"] = async ({ id }) => {
 /* ---------- simple lists ---------- */
 function simple({ slug, store, title, singular, fields, columns, order, monthField, defaults = {}, beforeDelete }) {
   const listPath = `/${slug}`;
-  const spec = (row) => ({ id: slug, fields: typeof fields === "function" ? fields() : fields, values: row || defaults, cancelHref: `#${listPath}`,
+  const spec = (row, fresh = defaults) => ({ id: slug, fields: typeof fields === "function" ? fields() : fields, values: row || fresh, cancelHref: `#${listPath}`,
     async onSubmit(v) { await db.put(store, { ...(row || {}), ...v }); toast(row ? "Saved." : `${singular} added.`); navigate(listPath); } });
   return {
     list: async ({ query }) => {
@@ -206,7 +206,10 @@ function simple({ slug, store, title, singular, fields, columns, order, monthFie
           ${rows.map((r) => html`<tr>${columns.map(([, cell]) => html`<td>${cell(r)}</td>`)}<td class="text-end text-nowrap"><a class="btn btn-sm btn-outline-secondary" href="#${listPath}/${r.id}">Edit</a> ${actionBtn(`delete-${slug}`, "Delete", { id: r.id })}</td></tr>`)}</tbody></table>`)
           : html`<div class="card-body">${empty("Nothing here yet.")}</div>`)}` };
     },
-    newForm: async () => ({ title: `Add ${singular.toLowerCase()}`, html: html`${pageHeader(`Add ${singular.toLowerCase()}`)}<div class="card"><div class="card-body">${formHtml(spec(null))}</div></div>` }),
+    newForm: async ({ query }) => {
+      const fresh = typeof defaults === "function" ? await defaults(query) : defaults;
+      return { title: `Add ${singular.toLowerCase()}`, html: html`${pageHeader(`Add ${singular.toLowerCase()}`, fresh.hint || "")}<div class="card"><div class="card-body">${formHtml(spec(null, fresh))}</div></div>` };
+    },
     editForm: async ({ params }) => {
       const row = await db.get(store, Number(params.id));
       if (!row) return notFound();
@@ -225,7 +228,13 @@ function simple({ slug, store, title, singular, fields, columns, order, monthFie
 }
 
 export const income = simple({ slug: "income", store: "income", title: "Salary & income", singular: "Income", monthField: "receivedOn",
-  defaults: { receivedOn: todayISO(), kind: "salary" },
+  // Prefill from the last entry of the same type so a monthly salary is: open, check the amount, Save.
+  async defaults(query) {
+    const kind = INCOME_KINDS.some(([k]) => k === query.get("kind")) ? query.get("kind") : "salary";
+    const last = (await db.all("income")).filter((i) => i.kind === kind).sort((a, b) => b.receivedOn.localeCompare(a.receivedOn) || b.id - a.id)[0];
+    return { receivedOn: todayISO(), kind, source: last?.source ?? null, amount: last?.amount ?? null,
+      hint: last ? `Prefilled from your last ${L.income[kind].toLowerCase()} (${formatDate(last.receivedOn)}) – change the amount if it differs.` : "" };
+  },
   fields: () => [date("receivedOn", "Date received", { required: true }), { name: "kind", label: "Type", type: "select", options: INCOME_KINDS }, text("source", "Source (e.g. employer)", { max: 120 }), money("amount", "Amount (₹)", { required: true, positive: true }), area()],
   columns: [["Date", (r) => formatDate(r.receivedOn)], ["Type", (r) => L.income[r.kind]], ["Source", (r) => r.source || "—"], ["Amount", (r) => inr(r.amount, 2)]],
   order: (a, b) => b.receivedOn.localeCompare(a.receivedOn) || b.id - a.id });
