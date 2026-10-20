@@ -1,4 +1,15 @@
-# Home Finance – property, rent & bills dashboard (single owner)
+# Home Finance – property, rent & bills tracker
+
+**Two versions live in this repo:**
+
+* **[`pwa/`](pwa/README.md) – the phone app (current direction).** Installable, works offline, keeps all data on the
+  device, with backup-file export/restore. Setup: [docs/PHONE_APP.md](docs/PHONE_APP.md).
+* **`app/` – the Flask + PostgreSQL web version** (everything below). Kept for reference and for a future shared-server
+  option; it is not needed to use the phone app.
+
+---
+
+# Flask + PostgreSQL version (single owner)
 
 Flask + PostgreSQL + Bootstrap 5. One owner account, no registration.
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for architecture, schema and phase plan.

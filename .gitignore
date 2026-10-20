@@ -44,3 +44,5 @@ instance/
 storage/
 backups/
 .pytest_cache/
+node_modules/
+pwa/dist/
