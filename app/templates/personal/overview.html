@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Personal overview{% endblock %}
+{% block content %}
+{% call m.page_header("Personal overview", "Your own money this month – actual cash in and out") %}
+  <a class="btn btn-outline-secondary" href="{{ url_for('personal.overview', month=prev_month.strftime('%Y-%m')) }}" aria-label="Previous month"><i class="bi bi-chevron-left"></i></a>
+  <strong class="px-1">{{ start.strftime('%B %Y') }}</strong>
+  <a class="btn btn-outline-secondary" href="{{ url_for('personal.overview', month=next_month.strftime('%Y-%m')) }}" aria-label="Next month"><i class="bi bi-chevron-right"></i></a>
+{% endcall %}
+
+<div class="row g-3">
+  <div class="col-6 col-lg-3">{{ m.stat('Salary received', figs.salary|inr, 'wallet2', 'success') }}</div>
+  <div class="col-6 col-lg-3">{{ m.stat('My rent received', figs.rent_received_mine|inr, 'cash-coin', 'success', 'Rooms where I collect rent') }}</div>
+  <div class="col-6 col-lg-3">{{ m.stat('Spent (actual)', figs.total_expenses|inr, 'cart', 'danger', 'Bills, plans, EMIs, everyday') }}</div>
+  <div class="col-6 col-lg-3">{{ m.stat('Left this month', figs.remaining|inr, 'piggy-bank', 'primary', 'After spending & investing') }}</div>
+</div>
+
+<div class="section-title">Where it went</div>
+<div class="row g-3">
+  <div class="col-12 col-lg-6"><div class="card"><div class="card-header">Spending by type</div>
+    {% if figs.categories %}<table class="table"><tbody>
+      {% for k, v in figs.categories.items() %}<tr><td>{{ k }}</td><td class="text-end">{{ v|inr }}</td></tr>{% endfor %}
+      <tr class="fw-bold"><td>Total spending</td><td class="text-end">{{ figs.total_expenses|inr }}</td></tr>
+      <tr><td>Invested (SIPs)</td><td class="text-end">{{ figs.investments|inr }}</td></tr>
+    </tbody></table>{% else %}<div class="card-body">{{ m.empty("No payments recorded this month.") }}</div>{% endif %}
+  </div></div>
+  <div class="col-12 col-lg-6"><div class="card"><div class="card-header">Recurring commitments (active)</div>
+    <table class="table"><tbody>
+    {% for key, label in kinds %}
+      <tr><td><i class="bi bi-{{ icons[key] }} me-2"></i><a href="{{ url_for('personal.list_commitments', kind=key) }}">{{ label }}</a> <span class="text-muted small">({{ by_kind[key].count if key in by_kind else 0 }})</span></td>
+        <td class="text-end">{{ by_kind[key].monthly|inr if key in by_kind else '—' }} <span class="text-muted small">/mo est.</span></td></tr>
+    {% endfor %}
+    </tbody></table>
+  </div></div>
+</div>
+
+<div class="section-title">Loans & investments</div>
+<div class="row g-3">
+  <div class="col-12 col-md-4">{{ m.stat('EMI still to repay', emi_left|inr, 'bank', 'danger', 'EMIs left × amount') }}</div>
+  <div class="col-12 col-md-4">{{ m.stat('Total invested', invested|inr, 'graph-up-arrow', 'primary') }}</div>
+  <div class="col-12 col-md-4">{{ m.stat('Current value', value|inr, 'piggy-bank', 'success', 'As last updated by you') }}</div>
+</div>
+{% endblock %}

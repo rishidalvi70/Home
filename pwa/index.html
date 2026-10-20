@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en" data-bs-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; manifest-src 'self'; worker-src 'self'">
+  <meta name="theme-color" content="#4f46e5">
+  <meta name="description" content="Private property, rent, bills and personal finance tracker. Your data stays on this device.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Home Finance">
+  <title>Home Finance</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="vendor/bootstrap.min.css">
+  <link rel="stylesheet" href="vendor/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar d-none d-lg-flex flex-column" id="nav-desktop"></aside>
+
+  <div class="offcanvas offcanvas-start sidebar" tabindex="-1" id="navDrawer" aria-labelledby="navDrawerLabel">
+    <div class="offcanvas-header pb-0">
+      <span class="brand" id="navDrawerLabel"><i class="bi bi-house-heart-fill"></i> Home Finance</span>
+      <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body d-flex flex-column" id="nav-drawer"></div>
+  </div>
+
+  <div class="content">
+    <header class="topbar">
+      <button class="btn btn-icon d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#navDrawer" aria-label="Open menu"><i class="bi bi-list fs-4"></i></button>
+      <span class="brand d-lg-none"><i class="bi bi-house-heart-fill"></i> Home Finance</span>
+      <span class="badge text-bg-warning ms-2" id="offline-pill" hidden>Offline</span>
+      <div class="ms-auto d-flex align-items-center gap-1">
+        <button class="btn btn-icon" type="button" id="themeToggle" aria-label="Toggle dark mode"><i class="bi bi-moon-stars"></i></button>
+        <a class="btn btn-icon" href="#/backup" aria-label="Backup and data" title="Backup & data"><i class="bi bi-shield-lock"></i></a>
+      </div>
+    </header>
+    <div class="px-3 pt-3 page-banners">
+      <div class="alert alert-warning mb-0" id="backup-banner" role="alert" hidden></div>
+      <div class="alert alert-info d-flex align-items-center justify-content-between gap-2 mt-2 mb-0" id="update-banner" role="alert" hidden>
+        <span>A new version of the app is ready.</span><button class="btn btn-sm btn-primary" type="button" data-action="apply-update">Update now</button>
+      </div>
+    </div>
+    <main class="page" id="view" aria-live="polite"><div class="empty-state"><p class="mb-0">Loading…</p></div></main>
+  </div>
+</div>
+<div id="toasts" class="toasts" aria-live="polite"></div>
+<noscript><div class="alert alert-danger m-3">This app needs JavaScript.</div></noscript>
+<script src="vendor/bootstrap.bundle.min.js"></script>
+<script src="vendor/chart.umd.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

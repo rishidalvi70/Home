@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Dashboard{% endblock %}
+
+{% macro upcoming_table(items) %}
+  {% if items %}
+  <div class="table-responsive"><table class="table">
+    <thead><tr><th>Due</th><th>What</th><th class="d-none d-sm-table-cell">Type</th><th class="text-end">Amount</th></tr></thead><tbody>
+    {% for i in items %}
+      <tr>
+        <td class="text-nowrap">{{ i.date|date_fmt }}{% if i.overdue %} <span class="badge badge-soft text-bg-danger">overdue</span>{% elif i.date == summary.today %} <span class="badge badge-soft text-bg-warning">today</span>{% endif %}</td>
+        <td><a href="{{ i.url }}">{{ i.label }}</a></td>
+        <td class="d-none d-sm-table-cell">{{ i.type }}</td><td class="text-end">{{ i.amount|inr }}</td>
+      </tr>
+    {% endfor %}</tbody></table></div>
+  {% else %}<div class="card-body">{{ m.empty("Nothing due in this window.") }}</div>{% endif %}
+{% endmacro %}
+
+{% block content %}
+{% set mo = summary.month %}
+{% set start = summary.start %}
+{% call m.page_header("Dashboard", "Actual money in and out – calculated from your records") %}
+  <a class="btn btn-outline-secondary" href="{{ url_for('main.dashboard', month=summary.prev_month) }}" aria-label="Previous month"><i class="bi bi-chevron-left"></i></a>
+  <strong class="px-1">{{ start.strftime('%B %Y') }}</strong>
+  <a class="btn btn-outline-secondary" href="{{ url_for('main.dashboard', month=summary.next_month) }}" aria-label="Next month"><i class="bi bi-chevron-right"></i></a>
+{% endcall %}
+
+<div class="row g-3">
+  <div class="col-6 col-xl-3">{{ m.stat('Money in', mo.total_income|inr, 'arrow-down-circle', 'success', 'Salary ' ~ (mo.salary|inr) ~ ' · my rent ' ~ (mo.rent_received_mine|inr)) }}</div>
+  <div class="col-6 col-xl-3">{{ m.stat('Spent (paid)', mo.total_expenses|inr, 'arrow-up-circle', 'danger', 'Only payments actually made') }}</div>
+  <div class="col-6 col-xl-3">{{ m.stat('Invested (SIPs)', mo.investments|inr, 'graph-up-arrow', 'primary') }}</div>
+  <div class="col-6 col-xl-3">{{ m.stat('Left so far', mo.remaining|inr, 'piggy-bank', 'primary', 'In − spent − invested') }}</div>
+  <div class="col-6 col-xl-3">{{ m.stat('Still to pay this month', summary.still_to_pay|inr, 'hourglass-split', 'warning', 'Bills + plans + EMIs + SIPs not yet paid') }}</div>
+  <div class="col-6 col-xl-3">{{ m.stat('Left after all dues', summary.left_after_dues|inr, 'wallet2', 'success' if summary.left_after_dues >= 0 else 'danger', 'If everything due is paid') }}</div>
+  <div class="col-6 col-xl-3">{{ m.stat('My rent still to collect', summary.owed.mine|inr, 'cash-coin', 'danger', 'Outstanding up to this month') }}</div>
+  <div class="col-6 col-xl-3">{{ m.stat('Family-collected rent owed', summary.owed.family|inr, 'people', 'secondary', 'Collected by father / mother') }}</div>
+</div>
+
+<div class="section-title">Rent</div>
+<div class="row g-3">
+  <div class="col-12 col-lg-6"><div class="card"><div class="card-header">Rooms where I collect rent</div><div class="card-body">
+    <dl class="kv"><dt>Expected this month</dt><dd>{{ mo.rent_expected_mine|inr }}</dd><dt>Received this month</dt><dd>{{ mo.rent_received_mine|inr }}</dd></dl></div></div></div>
+  <div class="col-12 col-lg-6"><div class="card"><div class="card-header">Rooms collected by family</div><div class="card-body">
+    <dl class="kv"><dt>Expected this month</dt><dd>{{ mo.rent_expected_family|inr }}</dd><dt>Received this month</dt><dd>{{ mo.rent_received_family|inr }}</dd></dl>
+    <p class="small text-muted mb-0">Tracked for the record – not counted as your income.</p></div></div></div>
+</div>
+
+<div class="section-title">Spending this month (actual payments)</div>
+<div class="row g-3">
+  <div class="col-6 col-lg-3">{{ m.stat('Property bills', mo.property_expenses|inr, 'buildings', 'primary', 'Only bills I paid') }}</div>
+  {% for label in ['Mobile plan', 'Subscription', 'EMI / Loan', 'LIC / Insurance'] %}
+  <div class="col-6 col-lg-3">{{ m.stat(label, (mo.by_commitment.get(label, 0))|inr, 'receipt', 'secondary') }}</div>
+  {% endfor %}
+  <div class="col-6 col-lg-3">{{ m.stat('Everyday / misc', mo.misc|inr, 'basket', 'secondary') }}</div>
+</div>
+
+<div class="section-title">Trends</div>
+<div class="row g-3">
+  <div class="col-12 col-xl-6"><div class="card"><div class="card-header">Income vs spending (6 months)</div><div class="card-body">
+    <div class="chart-box"><canvas data-chart='{{ {"type":"bar","labels":summary.chart_months,"datasets":[{"label":"Income","data":summary.chart_income,"color":"#16a34a"},{"label":"Spent + invested","data":summary.chart_expenses,"color":"#e11d48"}]}|tojson }}' aria-label="Income versus spending by month" role="img"></canvas></div></div></div></div>
+  <div class="col-12 col-xl-6"><div class="card"><div class="card-header">Spending by category</div><div class="card-body">
+    {% if summary.chart_categories %}<div class="chart-box"><canvas data-chart='{{ {"type":"doughnut","labels":summary.chart_categories.keys()|list,"datasets":[{"label":"Spent","data":summary.chart_categories.values()|list}]}|tojson }}' aria-label="Spending by category" role="img"></canvas></div>
+    {% else %}{{ m.empty("No payments this month yet.") }}{% endif %}</div></div></div>
+  <div class="col-12 col-xl-6"><div class="card"><div class="card-header">Rent expected vs collected (all rooms)</div><div class="card-body">
+    <div class="chart-box"><canvas data-chart='{{ {"type":"bar","labels":summary.chart_months,"datasets":[{"label":"Expected","data":summary.chart_rent_expected,"color":"#6366f1"},{"label":"Collected","data":summary.chart_rent_received,"color":"#16a34a"}]}|tojson }}' aria-label="Rent expected versus collected" role="img"></canvas></div></div></div></div>
+  <div class="col-12 col-xl-6"><div class="card"><div class="card-header">Properties</div><div class="card-body">
+    <div class="row g-2">
+      <div class="col-6"><div class="stat-label">Active</div><div class="stat-value" data-testid="active-properties">{{ summary.active_properties }}</div></div>
+      <div class="col-6"><div class="stat-label">Archived</div><div class="stat-value">{{ summary.archived_properties }}</div></div>
+      {% for label, count in summary.by_occupancy if count %}<div class="col-6"><div class="stat-label">{{ label }}</div><div class="stat-value">{{ count }}</div></div>{% endfor %}
+    </div></div></div></div>
+</div>
+
+<div class="section-title">Upcoming payments</div>
+<div class="row g-3">
+  <div class="col-12 col-xl-6"><div class="card"><div class="card-header">Next 7 days (and overdue)</div>{{ upcoming_table(summary.next7) }}</div></div>
+  <div class="col-12 col-xl-6"><div class="card"><div class="card-header">Next 30 days (and overdue)</div>{{ upcoming_table(summary.next30) }}</div></div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='vendor/chart.umd.js') }}"></script>
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>{% endblock %}

@@ -1,0 +1,14 @@
+{
+  "name": "home-finance-pwa",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "build": "node scripts/build-sw.mjs",
+    "check": "node scripts/build-sw.mjs --check",
+    "dist": "node scripts/build-sw.mjs --dist"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "^6.0.0"
+  }
+}

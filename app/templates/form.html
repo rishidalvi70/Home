@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+{% call m.page_header(title, subtitle) %}{% endcall %}
+<div class="card">
+  <div class="card-body">
+    <form method="post" novalidate>
+      {{ form.hidden_tag() }}
+      {{ m.form_fields(form, skip=skip or ()) }}
+      <div class="d-flex gap-2 mt-4">
+        <button class="btn btn-primary" type="submit"><i class="bi bi-check2"></i> {{ submit_label or 'Save' }}</button>
+        <a class="btn btn-outline-secondary" href="{{ cancel_url }}">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% if extra_template %}{% include extra_template %}{% endif %}
+{% endblock %}

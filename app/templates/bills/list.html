@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Property bills{% endblock %}
+{% block content %}
+{% call m.page_header("Property bills", "Electricity, gas, maintenance, taxes and more – and who pays each") %}
+  <a class="btn btn-primary" href="{{ url_for('bills.new_bill') }}"><i class="bi bi-plus-lg"></i> Add bill</a>
+{% endcall %}
+
+<form method="get" class="card card-body mb-3 filter-bar">
+  <div><label class="form-label small mb-1">Property</label>
+    <select class="form-select" name="property" data-autosubmit><option value="">All</option>
+    {% for p in properties %}<option value="{{ p.id }}" {{ 'selected' if args.get('property') == p.id|string }}>{{ p.name }}</option>{% endfor %}</select></div>
+  <div><label class="form-label small mb-1">Category</label>
+    <select class="form-select" name="category" data-autosubmit><option value="">All</option>
+    {% for k, l in categories %}<option value="{{ k }}" {{ 'selected' if args.get('category') == k }}>{{ l }}</option>{% endfor %}</select></div>
+  <div><label class="form-label small mb-1">Who pays</label>
+    <select class="form-select" name="responsible" data-autosubmit><option value="">Anyone</option>
+    {% for k, l in responsible %}<option value="{{ k }}" {{ 'selected' if args.get('responsible') == k }}>{{ l }}</option>{% endfor %}</select></div>
+  <div><label class="form-label small mb-1">Status</label>
+    <select class="form-select" name="status" data-autosubmit><option value="">Any</option>
+    {% for k in ['unpaid','partial','overdue','paid','not_mine','cancelled'] %}<option value="{{ k }}" {{ 'selected' if args.get('status') == k }}>{{ k.replace('_',' ').title() }}</option>{% endfor %}</select></div>
+  <div><label class="form-label small mb-1">Search</label>
+    <input class="form-control" name="q" value="{{ args.get('q','') }}" placeholder="name, bill no, provider"></div>
+  <div class="flex-grow-0"><button class="btn btn-outline-primary" type="submit">Filter</button></div>
+</form>
+
+<div class="row g-3 mb-3">
+  <div class="col-12 col-md-4">{{ m.stat('My share of these bills', totals.mine|inr, 'receipt', 'primary') }}</div>
+  <div class="col-12 col-md-4">{{ m.stat('Paid by me', totals.paid|inr, 'check2-circle', 'success') }}</div>
+  <div class="col-12 col-md-4">{{ m.stat('Still to pay', totals.outstanding|inr, 'hourglass-split', 'danger') }}</div>
+</div>
+
+<div class="card table-card">
+{% if bills %}
+<div class="table-responsive"><table class="table table-hover">
+  <thead><tr><th>Bill</th><th>Room</th><th>Due</th><th>Amount</th><th>Who pays</th><th>I paid</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for b in bills %}
+    <tr>
+      <td><a href="{{ url_for('bills.edit_bill', bid=b.id) }}">{{ b.name }}</a>
+        <div class="small text-muted">{{ b.category_label }}{% if b.bill_number %} · #{{ b.bill_number }}{% endif %}{% if b.period_label %} · {{ b.period_label }}{% endif %}</div></td>
+      <td>{{ b.property.name }}</td><td>{{ b.due_date|date_fmt }}</td><td>{{ b.amount|inr }}</td>
+      <td>{{ b.responsible_label }}{% if b.responsible in ('tenant','other') and b.tenant_payment_state != 'not_reported' %}<div class="small text-muted">{{ b.tenant_payment_state.replace('_',' ') }}</div>{% endif %}</td>
+      <td>{{ b.paid|inr }}</td><td>{{ b.status|status_badge }}</td>
+    </tr>
+  {% endfor %}
+  </tbody></table></div>
+{% else %}<div class="card-body">{{ m.empty("No bills match. Add the first one with “Add bill”.") }}</div>{% endif %}
+</div>
+{% endblock %}

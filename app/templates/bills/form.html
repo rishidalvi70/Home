@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+{% call m.page_header(title, (bill.property.name ~ ' · ' ~ bill.category_label) if bill else 'Record a bill, who pays it, and what you actually paid') %}
+  <a class="btn btn-outline-secondary" href="{{ url_for('bills.list_bills') }}"><i class="bi bi-arrow-left"></i> All bills</a>
+  {% if bill and not bill.payments %}{{ m.post_button(url_for('bills.delete_bill', bid=bill.id), 'Delete', confirm='Delete this bill?', icon='trash') }}{% endif %}
+{% endcall %}
+<div class="row g-3">
+  <div class="col-12 {{ 'col-xl-7' if bill }}">
+    <div class="card"><div class="card-body">
+      <form method="post" novalidate>
+        {{ form.hidden_tag() }}
+        {{ m.form_fields(form) }}
+        <div class="d-flex gap-2 mt-4">
+          <button class="btn btn-primary" type="submit"><i class="bi bi-check2"></i> Save</button>
+          <a class="btn btn-outline-secondary" href="{{ url_for('bills.list_bills') }}">Cancel</a>
+        </div>
+      </form>
+    </div></div>
+  </div>
+  {% if bill %}
+  <div class="col-12 col-xl-5">
+    <div class="card mb-3"><div class="card-header">Status {{ bill.status|status_badge }}</div><div class="card-body">
+      <dl class="kv">
+        <dt>Bill amount</dt><dd>{{ bill.amount|inr(2) }}</dd>
+        <dt>My share</dt><dd>{{ bill.my_share|inr(2) }}{% if bill.responsible in ('tenant','other') %} <span class="text-muted small">(not mine – won't count as my spending)</span>{% endif %}</dd>
+        <dt>Paid by me</dt><dd>{{ bill.paid|inr(2) }}</dd>
+        <dt>Outstanding</dt><dd class="{{ 'money-neg' if bill.outstanding }}">{{ bill.outstanding|inr(2) }}</dd>
+      </dl>
+    </div></div>
+    <div class="card mb-3"><div class="card-header">My payments</div>
+    {% if bill.payments %}
+      <div class="table-responsive"><table class="table"><tbody>
+      {% for p in bill.payments %}
+        <tr><td>{{ p.paid_on|date_fmt }}<div class="small text-muted">{{ p.method or '' }} {{ p.reference or '' }}</div></td><td>{{ p.amount|inr(2) }}</td>
+          <td class="text-end">{{ m.post_button(url_for('bills.delete_payment', pid=p.id), 'Delete', confirm='Delete this payment?') }}</td></tr>
+      {% endfor %}</tbody></table></div>
+    {% else %}<div class="card-body">{{ m.empty("Nothing paid yet. A due date passing never marks a bill paid.") }}</div>{% endif %}
+    </div>
+    {% if bill.my_share and not bill.is_cancelled %}
+    <div class="card"><div class="card-header">Record a payment</div><div class="card-body">
+      <form method="post" action="{{ url_for('bills.pay_bill', bid=bill.id) }}" novalidate>
+        {{ pay_form.hidden_tag() }}
+        {{ m.form_fields(pay_form, skip=('advance_due',)) }}
+        <button class="btn btn-success mt-3" type="submit"><i class="bi bi-plus-lg"></i> Add payment</button>
+      </form>
+    </div></div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

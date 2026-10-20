@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Rent{% endblock %}
+{% block content %}
+{% call m.page_header("Rent", "Monthly rent owed and received") %}
+  <a class="btn btn-primary" href="{{ url_for('rent.generate', month=start.strftime('%Y-%m')) }}"><i class="bi bi-magic"></i> Generate for {{ start.strftime('%b %Y') }}</a>
+{% endcall %}
+<div class="d-flex align-items-center gap-2 mb-3">
+  <a class="btn btn-outline-secondary" href="{{ url_for('rent.ledger', month=prev_month.strftime('%Y-%m')) }}" aria-label="Previous month"><i class="bi bi-chevron-left"></i></a>
+  <strong class="px-2">{{ start.strftime('%B %Y') }}</strong>
+  <a class="btn btn-outline-secondary" href="{{ url_for('rent.ledger', month=next_month.strftime('%Y-%m')) }}" aria-label="Next month"><i class="bi bi-chevron-right"></i></a>
+</div>
+<div class="row g-3 mb-3">
+  <div class="col-12 col-md-4">{{ m.stat('Expected', totals.expected|inr, 'calendar-check', 'primary') }}</div>
+  <div class="col-12 col-md-4">{{ m.stat('Received', totals.received|inr, 'cash-coin', 'success') }}</div>
+  <div class="col-12 col-md-4">{{ m.stat('Outstanding', totals.outstanding|inr, 'hourglass-split', 'danger') }}</div>
+</div>
+<div class="card table-card">
+{% if rows %}
+<div class="table-responsive"><table class="table table-hover">
+  <thead><tr><th>Room</th><th>Tenant</th><th>Due</th><th>Expected</th><th>Received</th><th>Outstanding</th><th>Goes to</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for o in rows %}
+    <tr>
+      <td><a href="{{ url_for('rent.obligation', oid=o.id) }}">{{ o.property.name }}</a></td>
+      <td>{{ o.tenant.name }}</td><td>{{ o.due_date|date_fmt }}</td>
+      <td>{{ o.expected_amount|inr }}</td><td>{{ o.received|inr }}</td>
+      <td class="{{ 'money-neg' if o.outstanding }}">{{ o.outstanding|inr }}</td>
+      <td>{{ o.property.collector_label }}</td><td>{{ o.status|status_badge }}</td>
+    </tr>
+  {% endfor %}
+  </tbody></table></div>
+{% else %}<div class="card-body">{{ m.empty("No rent records for this month yet. Use “Generate” to review and create them.") }}</div>{% endif %}
+</div>
+{% endblock %}

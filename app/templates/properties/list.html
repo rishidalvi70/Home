@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Rooms & tenants{% endblock %}
+{% block content %}
+{% call m.page_header("Rooms & tenants", "Every property you own or manage") %}
+  <a class="btn btn-outline-secondary" href="{{ url_for('properties.list_properties', archived=(0 if show_archived else 1)) }}">
+    <i class="bi bi-archive"></i> {{ 'Hide archived' if show_archived else 'Show archived' }}
+  </a>
+  <a class="btn btn-primary" href="{{ url_for('properties.new_property') }}"><i class="bi bi-plus-lg"></i> Add Property / Room</a>
+{% endcall %}
+
+<div class="row g-3">
+{% for p in properties %}
+  {% set t = p.active_tenant %}
+  <div class="col-12 col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body d-flex flex-column">
+        <div class="d-flex justify-content-between align-items-start gap-2">
+          <div>
+            <h2 class="h5 mb-1"><a class="text-decoration-none" href="{{ url_for('properties.detail', pid=p.id) }}">{{ p.name }}</a></h2>
+            <div class="text-muted small">
+              {% if p.mhada_room_no %}MHADA {{ p.mhada_room_no }}{% else %}MHADA no. not added{% endif %}
+              {% if p.ward_name or p.ward_number %} · Ward {{ p.ward_name or '' }} {{ p.ward_number or '' }}{% endif %}
+            </div>
+          </div>
+          <div class="text-end">
+            <span class="badge badge-soft text-bg-secondary">{{ p.occupancy_label }}</span>
+            {% if p.is_archived %}<br><span class="badge badge-soft text-bg-warning mt-1">Archived</span>{% endif %}
+          </div>
+        </div>
+        <hr class="my-3">
+        {% if t %}
+          <div class="d-flex justify-content-between"><span class="text-muted">Tenant</span><strong>{{ t.name }}</strong></div>
+          <div class="d-flex justify-content-between"><span class="text-muted">Monthly rent</span><strong>{{ t.monthly_rent|inr }}</strong></div>
+          <div class="d-flex justify-content-between"><span class="text-muted">Rent goes to</span><strong>{{ p.collector_label }}</strong></div>
+        {% elif p.occupancy_status == 'self_occupied' %}
+          <p class="text-muted mb-0">You live here.</p>
+        {% else %}
+          <p class="text-muted mb-0">No tenant recorded.</p>
+        {% endif %}
+        <div class="mt-auto pt-3 d-flex gap-2">
+          <a class="btn btn-sm btn-outline-primary" href="{{ url_for('properties.detail', pid=p.id) }}">Open</a>
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('properties.edit_property', pid=p.id) }}">Edit</a>
+        </div>
+      </div>
+    </div>
+  </div>
+{% else %}
+  <div class="col-12 card card-body">{{ m.empty("No properties yet. Click “Add Property / Room”.") }}</div>
+{% endfor %}
+</div>
+{% endblock %}

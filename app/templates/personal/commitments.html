@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+{% call m.page_header(title, "Estimates are based on each plan's amount and frequency – they are not payments.") %}
+  <a class="btn btn-primary" href="{{ url_for('personal.new_commitment', kind=kind) }}"><i class="bi bi-plus-lg"></i> Add</a>
+{% endcall %}
+
+<form method="get" class="filter-bar mb-3">
+  <input type="hidden" name="kind" value="{{ kind }}">
+  <div><label class="form-label small mb-1">Status</label>
+    <select class="form-select" name="status" data-autosubmit>
+      {% for k, l in [('active','Active'),('paused','Paused'),('cancelled','Cancelled'),('closed','Closed'),('all','All')] %}<option value="{{ k }}" {{ 'selected' if status == k }}>{{ l }}</option>{% endfor %}
+    </select></div>
+  {% if kind in ('mobile', 'subscription', '') %}
+  <div><label class="form-label small mb-1">Family member</label>
+    <select class="form-select" name="member" data-autosubmit><option value="">Everyone</option>
+      {% for mem in members %}<option value="{{ mem.id }}" {{ 'selected' if member == mem.id }}>{{ mem.name }}</option>{% endfor %}
+    </select></div>
+  {% endif %}
+</form>
+
+<div class="row g-3 mb-3">
+  <div class="col-6 col-lg-3">{{ m.stat('Estimated per month', monthly|inr, 'calendar3', 'primary', 'Active items only') }}</div>
+  <div class="col-6 col-lg-3">{{ m.stat('Estimated per year', annual|inr, 'calendar-range', 'primary') }}</div>
+  {% if kind == 'emi' %}<div class="col-6 col-lg-3">{{ m.stat('Still to repay (EMIs left)', emi_left|inr, 'bank', 'danger') }}</div>{% endif %}
+  {% if kind in ('mobile','subscription') %}
+    {% for name, amt in per_member.items() %}<div class="col-6 col-lg-3">{{ m.stat(name, amt|inr ~ ' /mo', 'person', 'secondary') }}</div>{% endfor %}
+  {% endif %}
+</div>
+
+<div class="card table-card">
+{% if items %}
+<div class="table-responsive"><table class="table table-hover">
+  <thead><tr>
+    <th>Name</th>{% if kind in ('mobile','subscription','') %}<th>Member</th>{% endif %}
+    <th>Amount</th><th>Frequency</th><th>Next due</th>
+    {% if kind == 'mobile' %}<th>Plan</th><th>Expires</th>{% endif %}
+    {% if kind == 'emi' %}<th>Left</th><th>Remaining</th>{% endif %}
+    {% if kind == 'insurance' %}<th>Sum assured</th><th>Paid so far</th>{% endif %}
+    {% if kind == 'sip' %}<th>Invested via SIP</th>{% endif %}
+    <th>Status</th></tr></thead>
+  <tbody>
+  {% for c in items %}
+    <tr>
+      <td><a href="{{ url_for('personal.edit_commitment', cid=c.id) }}">{{ c.name }}</a>
+        <div class="small text-muted">{% if not kind %}{{ c.kind_label }} · {% endif %}{{ c.provider or '' }}{% if c.reference %} · {{ c.reference }}{% endif %}</div></td>
+      {% if kind in ('mobile','subscription','') %}<td>{{ c.member.name if c.member else '—' }}</td>{% endif %}
+      <td>{{ c.amount|inr(2) }}</td><td>{{ freq[c.frequency] }}</td>
+      <td>{{ c.next_due_date|date_fmt }}</td>
+      {% if kind == 'mobile' %}<td>{{ (c.plan_type or '—')|title }}</td><td>{{ c.expiry_date|date_fmt }}</td>{% endif %}
+      {% if kind == 'emi' %}<td>{{ c.installments_left if c.installments_left is not none else '—' }}</td><td>{{ c.remaining_amount|inr if c.remaining_amount is not none else '—' }}</td>{% endif %}
+      {% if kind == 'insurance' %}<td>{{ c.total_amount|inr }}</td><td>{{ c.total_paid|inr }}</td>{% endif %}
+      {% if kind == 'sip' %}<td>{{ c.total_paid|inr }}</td>{% endif %}
+      <td>{{ c.due_state|status_badge }}</td>
+    </tr>
+  {% endfor %}
+  </tbody></table></div>
+{% else %}<div class="card-body">{{ m.empty("Nothing here yet. Click “Add”.") }}</div>{% endif %}
+</div>
+{% endblock %}

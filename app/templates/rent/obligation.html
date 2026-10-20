@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Rent {{ ob.property.name }}{% endblock %}
+{% block content %}
+{% call m.page_header(ob.property.name ~ " – " ~ ob.period_start.strftime('%B %Y'), "Tenant: " ~ ob.tenant.name) %}
+  <a class="btn btn-outline-secondary" href="{{ url_for('rent.ledger', month=ob.period_start.strftime('%Y-%m')) }}"><i class="bi bi-arrow-left"></i> Ledger</a>
+  {{ m.post_button(url_for('rent.toggle_cancel', oid=ob.id), 'Reinstate' if ob.is_cancelled else 'Cancel this month', confirm=None if ob.is_cancelled else 'Cancel this rent record? Payments already recorded are kept.', cls='btn btn-outline-secondary') }}
+{% endcall %}
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3">{{ m.stat('Expected', ob.expected_amount|inr, 'calendar-check', 'primary', 'Due ' ~ ob.due_date|date_fmt) }}</div>
+  <div class="col-6 col-md-3">{{ m.stat('Received', ob.received|inr, 'cash-coin', 'success') }}</div>
+  <div class="col-6 col-md-3">{{ m.stat('Outstanding', ob.outstanding|inr, 'hourglass-split', 'danger') }}</div>
+  <div class="col-6 col-md-3">{{ m.stat('Status', ob.status|status_badge, 'flag', 'secondary', 'Rent goes to ' ~ ob.property.collector_label) }}</div>
+</div>
+<div class="row g-3">
+  <div class="col-12 col-lg-7">
+    <div class="card"><div class="card-header">Payments</div>
+    {% if ob.payments %}
+      <div class="table-responsive"><table class="table"><thead><tr><th>Date</th><th>Amount</th><th>Method</th><th>Reference</th><th></th></tr></thead><tbody>
+      {% for p in ob.payments %}
+        <tr><td>{{ p.paid_on|date_fmt }}{% if p.paid_on > ob.due_date %} <span class="badge text-bg-warning">late</span>{% endif %}</td>
+          <td>{{ p.amount|inr(2) }}</td><td>{{ p.method or '—' }}</td><td>{{ p.reference or '—' }}</td>
+          <td class="text-end">{{ m.post_button(url_for('rent.delete_payment', pid=p.id), 'Delete', confirm='Delete this payment?') }}</td></tr>
+      {% endfor %}</tbody></table></div>
+    {% else %}<div class="card-body">{{ m.empty("No payments yet. Rent is never marked received automatically.") }}</div>{% endif %}
+    </div>
+  </div>
+  <div class="col-12 col-lg-5">
+    <div class="card"><div class="card-header">Record a payment</div><div class="card-body">
+      <form method="post" novalidate>
+        {{ form.hidden_tag() }}
+        {{ m.form_fields(form, skip=('advance_due',)) }}
+        <button class="btn btn-primary mt-3" type="submit"><i class="bi bi-plus-lg"></i> Add payment</button>
+      </form>
+    </div></div>
+  </div>
+</div>
+{% endblock %}
