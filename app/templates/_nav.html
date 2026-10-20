@@ -1,0 +1,25 @@
+{% macro item(endpoint, icon, label, active, kind=None) %}
+  <a class="nav-link-item {{ 'active' if active }}" href="{{ url_for(endpoint, kind=kind) }}"><i class="bi bi-{{ icon }}"></i><span>{{ label }}</span></a>
+{% endmacro %}
+{% set ep = request.endpoint or '' %}
+{% set cur_kind = request.args.get('kind', '') %}
+<div class="brand d-none d-lg-flex"><i class="bi bi-house-heart-fill"></i> Home Finance</div>
+<nav class="nav-list">
+  {{ item('main.dashboard', 'speedometer2', 'Dashboard', ep == 'main.dashboard') }}
+  <div class="nav-heading">Properties</div>
+  {{ item('properties.list_properties', 'buildings', 'Rooms & tenants', request.blueprint == 'properties') }}
+  {{ item('rent.ledger', 'cash-coin', 'Rent', request.blueprint == 'rent') }}
+  {{ item('bills.list_bills', 'receipt', 'Property bills', request.blueprint == 'bills') }}
+  <div class="nav-heading">Personal</div>
+  {{ item('personal.overview', 'pie-chart', 'Overview', ep == 'personal.overview') }}
+  {{ item('personal.list_commitments', 'phone', 'Mobile plans', ep.startswith('personal') and 'commitment' in ep and cur_kind == 'mobile', kind='mobile') }}
+  {{ item('personal.list_commitments', 'tv', 'Subscriptions', ep.startswith('personal') and 'commitment' in ep and cur_kind == 'subscription', kind='subscription') }}
+  {{ item('personal.list_commitments', 'bank', 'EMIs & loans', ep.startswith('personal') and 'commitment' in ep and cur_kind == 'emi', kind='emi') }}
+  {{ item('personal.list_commitments', 'shield-check', 'LIC & insurance', ep.startswith('personal') and 'commitment' in ep and cur_kind == 'insurance', kind='insurance') }}
+  {{ item('personal.list_commitments', 'graph-up-arrow', 'SIPs', ep.startswith('personal') and 'commitment' in ep and cur_kind == 'sip', kind='sip') }}
+  {{ item('personal.list_commitments', 'arrow-repeat', 'Other recurring', ep.startswith('personal') and 'commitment' in ep and cur_kind == 'other', kind='other') }}
+  {{ item('personal.list_income', 'wallet2', 'Salary & income', 'income' in ep) }}
+  {{ item('personal.list_expenses', 'basket', 'Everyday expenses', 'expense' in ep) }}
+  {{ item('personal.list_investments', 'piggy-bank', 'Investments', 'investment' in ep) }}
+  {{ item('personal.list_members', 'people', 'Family members', 'member' in ep) }}
+</nav>

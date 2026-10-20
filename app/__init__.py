@@ -35,7 +35,16 @@ def create_app(config_name: str | None = None) -> Flask:
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
+    from app.bills import bp as bills_bp
+    from app.filters import register as register_filters
+    from app.personal import bp as personal_bp
+    from app.rent import bp as rent_bp
+
     app.register_blueprint(properties_bp, url_prefix="/properties")
+    app.register_blueprint(rent_bp, url_prefix="/rent")
+    app.register_blueprint(bills_bp, url_prefix="/bills")
+    app.register_blueprint(personal_bp, url_prefix="/personal")
+    register_filters(app)
     register_cli(app)
 
     @app.get("/healthz")

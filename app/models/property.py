@@ -11,6 +11,9 @@ OCCUPANCY_STATUSES = [
 ]
 OCCUPANCY_LABELS = dict(OCCUPANCY_STATUSES)
 
+COLLECTORS = [("me", "Me"), ("father", "Father"), ("mother", "Mother"), ("other", "Someone else")]
+COLLECTOR_LABELS = dict(COLLECTORS)
+
 # Initial, provisional records. Names are editable; the count is not hardcoded anywhere else.
 INITIAL_PROPERTIES = [
     ("Room 1", "self_occupied"),
@@ -31,6 +34,10 @@ class Property(TimestampMixin, db.Model):
             + ")",
             name="ck_property_occupancy_status",
         ),
+        db.CheckConstraint(
+            "rent_collected_by IN (" + ",".join(f"'{k}'" for k, _ in COLLECTORS) + ")",
+            name="ck_property_rent_collected_by",
+        ),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -43,8 +50,25 @@ class Property(TimestampMixin, db.Model):
     property_type = db.Column(db.String(60))
     ownership = db.Column(db.String(120))
     notes = db.Column(db.Text)
+    area_sqft = db.Column(db.Numeric(10, 2))
+    space_details = db.Column(db.Text)  # e.g. "1 hall, 1 kitchen, attached bath, 2nd floor"
+    # Who actually receives this property's rent. Only "me" counts as my income.
+    rent_collected_by = db.Column(db.String(20), nullable=False, default="me", server_default="me")
     sort_order = db.Column(db.Integer, nullable=False, default=0)
     archived_at = db.Column(db.DateTime(timezone=True))
+
+    connections = db.relationship("UtilityConnection", back_populates="property",
+                                  order_by="UtilityConnection.kind")
+    tenants = db.relationship("Tenant", back_populates="property",
+                              order_by="Tenant.is_active.desc(), Tenant.start_date.desc()")
+
+    @property
+    def active_tenant(self):
+        return next((t for t in self.tenants if t.is_active), None)
+
+    @property
+    def collector_label(self) -> str:
+        return COLLECTOR_LABELS.get(self.rent_collected_by, self.rent_collected_by)
 
     @property
     def is_archived(self) -> bool:

@@ -1,0 +1,64 @@
+{% macro page_header(title, subtitle=None) %}
+<div class="page-header">
+  <div>
+    <h1>{{ title }}</h1>
+    {% if subtitle %}<p class="text-muted mb-0">{{ subtitle }}</p>{% endif %}
+  </div>
+  <div class="page-actions">{{ caller() if caller else '' }}</div>
+</div>
+{% endmacro %}
+
+{% macro stat(title, value, icon='cash-stack', tone='primary', sub=None) %}
+<div class="stat-card">
+  <div class="stat-icon tone-{{ tone }}"><i class="bi bi-{{ icon }}"></i></div>
+  <div class="min-w-0">
+    <div class="stat-label">{{ title }}</div>
+    <div class="stat-value">{{ value }}</div>
+    {% if sub %}<div class="stat-sub">{{ sub }}</div>{% endif %}
+  </div>
+</div>
+{% endmacro %}
+
+{% macro field(f, cols='col-12 col-md-6') %}
+  {% if f.type == 'BooleanField' %}
+    <div class="{{ cols }} d-flex align-items-end">
+      <div class="form-check form-switch mb-2">
+        {{ f(class='form-check-input') }}
+        <label class="form-check-label" for="{{ f.id }}">{{ f.label.text }}</label>
+      </div>
+    </div>
+  {% else %}
+    <div class="{{ 'col-12' if f.type == 'TextAreaField' else cols }}">
+      <label class="form-label" for="{{ f.id }}">{{ f.label.text }}{% if f.flags.required %} <span class="text-danger">*</span>{% endif %}</label>
+      {% if f.type == 'SelectField' %}
+        {{ f(class='form-select' ~ (' is-invalid' if f.errors else '')) }}
+      {% elif f.type == 'TextAreaField' %}
+        {{ f(class='form-control' ~ (' is-invalid' if f.errors else ''), rows=3) }}
+      {% elif f.type in ('DecimalField', 'IntegerField') %}
+        {{ f(class='form-control' ~ (' is-invalid' if f.errors else ''), inputmode='decimal', step='any') }}
+      {% else %}
+        {{ f(class='form-control' ~ (' is-invalid' if f.errors else '')) }}
+      {% endif %}
+      {% for e in f.errors %}<div class="invalid-feedback d-block">{{ e }}</div>{% endfor %}
+    </div>
+  {% endif %}
+{% endmacro %}
+
+{% macro form_fields(form, only=None, skip=()) %}
+<div class="row g-3">
+  {% for f in form if f.type != 'CSRFTokenField' and f.name not in skip and (only is none or f.name in only) %}
+    {{ field(f) }}
+  {% endfor %}
+</div>
+{% endmacro %}
+
+{% macro post_button(url, label, confirm=None, cls='btn btn-sm btn-outline-danger', icon=None) %}
+<form method="post" action="{{ url }}" class="d-inline"{% if confirm %} data-confirm="{{ confirm }}"{% endif %}>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <button type="submit" class="{{ cls }}">{% if icon %}<i class="bi bi-{{ icon }}"></i> {% endif %}{{ label }}</button>
+</form>
+{% endmacro %}
+
+{% macro empty(message) %}
+<div class="empty-state"><i class="bi bi-inbox"></i><p class="mb-0">{{ message }}</p></div>
+{% endmacro %}

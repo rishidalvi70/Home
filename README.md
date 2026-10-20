@@ -3,7 +3,13 @@
 Flask + PostgreSQL + Bootstrap 5. One owner account, no registration.
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for architecture, schema and phase plan.
 
-**Status:** Phase 1 (foundation) complete. Phases 2–5 are not built yet.
+**Status:** Phase 1 (foundation) and Phase 2 (financial records) are built. Not yet built: calendar & Google
+Calendar sync, receipt/document storage, reports/exports/search, backups & PWA install (Phases 3–5).
+
+What you can do today: manage rooms (rename, add, archive), tenants, rent ledger and increments, electricity/gas
+connections, property bills with who-pays tracking, mobile plans, subscriptions, EMIs, LIC/insurance, SIPs,
+salary, everyday expenses and investments, with a dashboard of what's left. See
+[docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) (flow + upgrade steps).
 
 ## Windows setup (PowerShell)
 

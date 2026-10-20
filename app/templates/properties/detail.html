@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}{{ prop.name }}{% endblock %}
+{% block content %}
+{% call m.page_header(prop.name, prop.occupancy_label ~ (' · archived' if prop.is_archived else '')) %}
+  <a class="btn btn-outline-secondary" href="{{ url_for('properties.list_properties') }}"><i class="bi bi-arrow-left"></i> All rooms</a>
+  <a class="btn btn-primary" href="{{ url_for('properties.edit_property', pid=prop.id) }}"><i class="bi bi-pencil"></i> Edit</a>
+  {% if prop.is_archived %}
+    {{ m.post_button(url_for('properties.restore', pid=prop.id), 'Restore', cls='btn btn-success', icon='arrow-counterclockwise') }}
+  {% else %}
+    {{ m.post_button(url_for('properties.archive', pid=prop.id), 'Archive', confirm='Archive this property? Its financial history is kept.', cls='btn btn-outline-secondary', icon='archive') }}
+  {% endif %}
+{% endcall %}
+
+<div class="row g-3">
+  <div class="col-12 col-xl-6">
+    <div class="card h-100">
+      <div class="card-header">Details</div>
+      <div class="card-body">
+        <dl class="kv">
+          <dt>MHADA room no.</dt><dd>{{ prop.mhada_room_no or '—' }}</dd>
+          <dt>Ward</dt><dd>{{ prop.ward_name or '—' }}{% if prop.ward_number %} ({{ prop.ward_number }}){% endif %}</dd>
+          <dt>Address</dt><dd>{{ prop.address or '—' }}</dd>
+          <dt>Property type</dt><dd>{{ prop.property_type or '—' }}</dd>
+          <dt>Ownership</dt><dd>{{ prop.ownership or '—' }}</dd>
+          <dt>Area</dt><dd>{% if prop.area_sqft %}{{ '%g'|format(prop.area_sqft) }} sq ft{% else %}—{% endif %}</dd>
+          <dt>Space details</dt><dd>{{ prop.space_details or '—' }}</dd>
+          <dt>Rent is collected by</dt><dd>{{ prop.collector_label }}</dd>
+          <dt>Notes</dt><dd>{{ prop.notes or '—' }}</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-6">
+    <div class="card h-100">
+      <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <span>Room report</span>
+        <div class="nav nav-pills small">
+          {% for key, label in [('all','All time'),('fy','This FY'),('month','This month')] %}
+            <a class="nav-link py-1 {{ 'active' if period == key }}" href="{{ url_for('properties.detail', pid=prop.id, period=key) }}">{{ label }}</a>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="card-body">
+        <dl class="kv">
+          <dt>Rent expected</dt><dd>{{ report.rent_expected|inr }}</dd>
+          <dt>Rent received (cash)</dt><dd>{{ report.rent_cash_received|inr }}</dd>
+          <dt>Rent outstanding</dt><dd class="{{ 'money-neg' if report.rent_outstanding }}">{{ report.rent_outstanding|inr }}</dd>
+          <dt>I paid (bills & repairs)</dt><dd>{{ report.owner_total|inr }}</dd>
+          {% for cat, amt in report.owner_by_category.items() %}
+            <dt class="ps-3 small">– {{ cat }}</dt><dd class="small">{{ amt|inr }}</dd>
+          {% endfor %}
+          <dt>Tenant/other paid (not mine)</dt><dd>{{ report.tenant_paid_recorded|inr }}</dd>
+          <dt>Net rental cash flow</dt><dd class="fw-bold {{ 'money-neg' if report.net_cash_flow < 0 else 'money-pos' }}">{{ report.net_cash_flow|inr }}</dd>
+        </dl>
+        {% if prop.rent_collected_by != 'me' %}
+          <p class="small text-muted mt-3 mb-0"><i class="bi bi-info-circle"></i> Rent for this room goes to {{ prop.collector_label }}, so it isn't counted in your income on the dashboard.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Electricity, gas & other connections</span>
+        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('properties.new_connection', pid=prop.id) }}"><i class="bi bi-plus-lg"></i> Add</a>
+      </div>
+      {% if prop.connections %}
+      <div class="table-responsive"><table class="table">
+        <thead><tr><th>Type</th><th>Provider</th><th>Nickname</th><th>Consumer no.</th><th>Meter no.</th><th></th></tr></thead>
+        <tbody>
+        {% for c in prop.connections %}
+          <tr>
+            <td>{{ c.kind_label }}{% if not c.is_active %} <span class="badge text-bg-secondary">inactive</span>{% endif %}</td>
+            <td>{{ c.provider or '—' }}</td><td>{{ c.nickname or '—' }}</td>
+            <td>{{ c.consumer_no or '—' }}</td><td>{{ c.meter_no or '—' }}</td>
+            <td class="text-end text-nowrap">
+              <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('properties.edit_connection', cid=c.id) }}">Edit</a>
+              {{ m.post_button(url_for('properties.delete_connection', cid=c.id), 'Delete', confirm='Delete this connection?') }}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody></table></div>
+      {% else %}<div class="card-body">{{ m.empty("No connections yet. Add the electricity / gas consumer numbers.") }}</div>{% endif %}
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Tenants & rent</span>
+        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('properties.new_tenant', pid=prop.id) }}"><i class="bi bi-plus-lg"></i> Add tenant</a>
+      </div>
+      <div class="card-body">
+      {% for t in prop.tenants %}
+        <div class="{{ 'mb-4 pb-4 border-bottom' if not loop.last }}">
+          <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
+            <h3 class="h6 mb-0">{{ t.name }}
+              {% if t.is_active %}<span class="badge badge-soft text-bg-success">Current</span>{% else %}<span class="badge badge-soft text-bg-secondary">Former</span>{% endif %}</h3>
+            <div class="d-flex flex-wrap gap-2">
+              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('properties.new_revision', tid=t.id) }}"><i class="bi bi-graph-up-arrow"></i> Record increment</a>
+              <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('properties.edit_tenant', tid=t.id) }}">Edit</a>
+              {{ m.post_button(url_for('properties.delete_tenant', tid=t.id), 'Remove', confirm='Remove this tenant? If rent records exist they are kept and the tenant becomes a former tenant.') }}
+            </div>
+          </div>
+          <div class="row g-3">
+            <div class="col-12 col-lg-6"><dl class="kv">
+              <dt>Phone / email</dt><dd>{{ t.phone or '—' }}{% if t.email %} · {{ t.email }}{% endif %}</dd>
+              <dt>Tenancy</dt><dd>{{ t.start_date|date_fmt }} → {{ t.end_date|date_fmt if t.end_date else 'ongoing' }}</dd>
+              <dt>Monthly rent</dt><dd><strong>{{ t.monthly_rent|inr }}</strong> due on day {{ t.rent_due_day }}</dd>
+              <dt>Security deposit</dt><dd>{{ t.security_deposit|inr }} <span class="text-muted small">(not income)</span></dd>
+              <dt>Planned increment</dt><dd>{% if t.increment_percent %}{{ t.increment_percent }}%{% else %}—{% endif %}{% if t.next_increment_date %} on {{ t.next_increment_date|date_fmt }}{% if t.next_increment_date <= today %} <span class="badge text-bg-warning">due now</span>{% endif %}{% endif %}</dd>
+              <dt>Notes</dt><dd>{{ t.notes or '—' }}</dd>
+            </dl></div>
+            <div class="col-12 col-lg-6">
+              <div class="small text-muted mb-1">Rent increment history</div>
+              {% if t.revisions %}
+              <div class="table-responsive"><table class="table table-sm"><thead><tr><th>From</th><th>Old</th><th>New</th><th>Change</th><th></th></tr></thead><tbody>
+              {% for r in t.revisions %}
+                <tr><td>{{ r.effective_from|date_fmt }}</td><td>{{ r.old_rent|inr }}</td><td>{{ r.new_rent|inr }}</td>
+                    <td>{{ r.change|inr }}{% if r.percent is not none %} ({{ r.percent }}%){% endif %}</td>
+                    <td class="text-end">{{ m.post_button(url_for('properties.delete_revision', rid=r.id), '✕', confirm='Remove this increment from the history?', cls='btn btn-sm btn-outline-danger py-0') }}</td></tr>
+                {% if r.reason %}<tr><td colspan="5" class="small text-muted border-0 pt-0">{{ r.reason }}</td></tr>{% endif %}
+              {% endfor %}</tbody></table></div>
+              {% else %}<p class="text-muted small mb-0">No increments recorded yet.</p>{% endif %}
+            </div>
+          </div>
+        </div>
+      {% else %}
+        {{ m.empty("No tenant recorded for this room.") }}
+      {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-6">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center"><span>Recent rent</span>
+        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('rent.ledger') }}">Rent ledger</a></div>
+      {% if obligations %}
+      <div class="table-responsive"><table class="table"><thead><tr><th>Month</th><th>Expected</th><th>Received</th><th>Status</th></tr></thead><tbody>
+      {% for o in obligations %}
+        <tr><td><a href="{{ url_for('rent.obligation', oid=o.id) }}">{{ o.period_start.strftime('%b %Y') }}</a></td>
+          <td>{{ o.expected_amount|inr }}</td><td>{{ o.received|inr }}</td><td>{{ o.status|status_badge }}</td></tr>
+      {% endfor %}</tbody></table></div>
+      {% else %}<div class="card-body">{{ m.empty("No rent generated yet. Use Rent → Generate.") }}</div>{% endif %}
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-6">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center"><span>Recent bills</span>
+        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('bills.new_bill', property_id=prop.id) }}"><i class="bi bi-plus-lg"></i> Add bill</a></div>
+      {% if bills %}
+      <div class="table-responsive"><table class="table"><thead><tr><th>Bill</th><th>Amount</th><th>Who pays</th><th>Status</th></tr></thead><tbody>
+      {% for b in bills %}
+        <tr><td><a href="{{ url_for('bills.edit_bill', bid=b.id) }}">{{ b.name }}</a><div class="small text-muted">{{ b.category_label }}{% if b.bill_number %} · #{{ b.bill_number }}{% endif %}</div></td>
+          <td>{{ b.amount|inr }}</td><td>{{ b.responsible_label }}</td><td>{{ b.status|status_badge }}</td></tr>
+      {% endfor %}</tbody></table></div>
+      {% else %}<div class="card-body">{{ m.empty("No bills recorded for this room.") }}</div>{% endif %}
+    </div>
+  </div>
+
+  {% if not prop.tenants and not prop.connections %}
+  <div class="col-12 text-end">
+    {{ m.post_button(url_for('properties.delete_property', pid=prop.id), 'Delete this property', confirm='Permanently delete this empty property?', icon='trash') }}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

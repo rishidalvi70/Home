@@ -3,7 +3,7 @@ from flask import Flask
 from flask.cli import with_appcontext
 
 from app.extensions import db
-from app.models import OwnerAccount
+from app.models import FamilyMember, OwnerAccount
 from app.models.property import seed_initial_properties
 from app.security import validate_new_password
 
@@ -48,3 +48,15 @@ def register_cli(app: Flask) -> None:
         """Create the six initial properties (only if no properties exist yet)."""
         n = seed_initial_properties()
         click.echo(f"Created {n} properties." if n else "Properties already exist; nothing done.")
+
+    @app.cli.command("seed-members")
+    @with_appcontext
+    def seed_members():
+        """Create the three editable family-member labels (only if none exist)."""
+        if FamilyMember.query.first() is not None:
+            click.echo("Family members already exist; nothing done.")
+            return
+        for n in ("Member 1", "Member 2", "Member 3"):
+            db.session.add(FamilyMember(name=n))
+        db.session.commit()
+        click.echo("Created 3 family members.")

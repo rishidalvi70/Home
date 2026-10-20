@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+{% call m.page_header(title) %}
+  <a class="btn btn-primary" href="{{ url_for('personal.new_' ~ slug) }}"><i class="bi bi-plus-lg"></i> Add {{ singular|lower }}</a>
+{% endcall %}
+{% if start %}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+  <a class="btn btn-outline-secondary" href="{{ url_for('personal.list_' ~ slug, month=prev_month.strftime('%Y-%m')) }}" aria-label="Previous month"><i class="bi bi-chevron-left"></i></a>
+  <strong class="px-2">{{ start.strftime('%B %Y') }}</strong>
+  <a class="btn btn-outline-secondary" href="{{ url_for('personal.list_' ~ slug, month=next_month.strftime('%Y-%m')) }}" aria-label="Next month"><i class="bi bi-chevron-right"></i></a>
+  <span class="ms-auto fw-bold">Total: {{ total|inr(2) }}</span>
+</div>
+{% endif %}
+<div class="card table-card">
+{% if rows %}
+<div class="table-responsive"><table class="table table-hover">
+  <thead><tr>{% for header, _ in columns %}<th>{{ header }}</th>{% endfor %}<th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      {% for _, cell in columns %}<td>{{ cell(r) }}</td>{% endfor %}
+      <td class="text-end text-nowrap">
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('personal.edit_' ~ slug, oid=r.id) }}">Edit</a>
+        {{ m.post_button(url_for('personal.delete_' ~ slug, oid=r.id), 'Delete', confirm='Delete this entry?') }}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody></table></div>
+{% else %}<div class="card-body">{{ m.empty("Nothing here yet.") }}</div>{% endif %}
+</div>
+{% endblock %}

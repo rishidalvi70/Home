@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Generate rent{% endblock %}
+{% block content %}
+{% call m.page_header("Generate rent – " ~ start.strftime('%B %Y'), "Review first. Nothing is saved or marked received until you confirm.") %}
+  <a class="btn btn-outline-secondary" href="{{ url_for('rent.ledger', month=start.strftime('%Y-%m')) }}">Back to ledger</a>
+{% endcall %}
+<div class="d-flex align-items-center gap-2 mb-3">
+  <a class="btn btn-outline-secondary" href="{{ url_for('rent.generate', month=prev_month.strftime('%Y-%m')) }}" aria-label="Previous month"><i class="bi bi-chevron-left"></i></a>
+  <strong class="px-2">{{ start.strftime('%B %Y') }}</strong>
+  <a class="btn btn-outline-secondary" href="{{ url_for('rent.generate', month=next_month.strftime('%Y-%m')) }}" aria-label="Next month"><i class="bi bi-chevron-right"></i></a>
+</div>
+<form method="post" action="{{ url_for('rent.generate', month=start.strftime('%Y-%m')) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="card table-card">
+  {% if rows %}
+    <div class="table-responsive"><table class="table">
+      <thead><tr><th></th><th>Room</th><th>Tenant</th><th>Rent for the month</th><th>Due date</th><th></th></tr></thead>
+      <tbody>
+      {% for r in rows %}
+        <tr>
+          <td><input class="form-check-input" type="checkbox" name="tenant_id" value="{{ r.tenant.id }}" id="t{{ r.tenant.id }}" {{ 'checked' if not r.exists else 'disabled' }}></td>
+          <td><label for="t{{ r.tenant.id }}">{{ r.tenant.property.name }}</label></td>
+          <td>{{ r.tenant.name }}</td><td>{{ r.amount|inr }}</td><td>{{ r.due_date|date_fmt }}</td>
+          <td>{% if r.exists %}<span class="badge badge-soft text-bg-secondary">Already exists</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody></table></div>
+  {% else %}<div class="card-body">{{ m.empty("No current tenants to generate rent for this month.") }}</div>{% endif %}
+  </div>
+  {% if rows %}<button class="btn btn-primary mt-3" type="submit"><i class="bi bi-check2"></i> Create selected rent records</button>{% endif %}
+</form>
+{% endblock %}

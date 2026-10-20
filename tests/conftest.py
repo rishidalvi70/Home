@@ -67,3 +67,25 @@ def login(client, username="owner", password=PASSWORD, **kw):
 def auth_client(client, owner):
     assert login(client).status_code == 302
     return client
+
+
+def page_token(client, path="/"):
+    import re as _re
+
+    html = client.get(path).get_data(as_text=True)
+    return _re.search(r'name="csrf_token"[^>]*value="([^"]+)"', html).group(1)
+
+
+def post(client, url, data=None, token_from="/", **kw):
+    data = dict(data or {})
+    data["csrf_token"] = page_token(client, token_from)
+    return client.post(url, data=data, **kw)
+
+
+@pytest.fixture
+def seeded(app):
+    """Six properties like a fresh install."""
+    from app.models.property import seed_initial_properties
+
+    with app.app_context():
+        seed_initial_properties()

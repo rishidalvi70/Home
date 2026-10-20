@@ -82,8 +82,10 @@ from owner cash totals; deposits excluded from income.
 1. **Phase 1 – Foundation** *(this commit)*: app factory, config, PostgreSQL + migrations,
    owner auth (CLI setup, login, lockout, rate limit, password change, CSRF), dashboard shell,
    property table + six seeded rooms + read-only list, tests.
-2. **Phase 2 – Financial records**: property CRUD/archive, tenants/rent/payments, bills,
-   MHADA/tax, insurance, mobile, subscriptions, development.
+2. **Phase 2 – Financial records** *(built)*: property CRUD/archive, tenants, rent + increments, utility
+   connections, bills with responsibility, mobile/subscriptions/EMI/LIC/SIP (one `commitment` table + payments),
+   income, everyday expenses, investments. *Not yet: dedicated MHADA/tax schedules and development-expense screens
+   (property bills with those categories cover the basics for now).*
 3. **Phase 3 – Calendar & documents**.
 4. **Phase 4 – Reporting, search, exports**.
 5. **Phase 5 – Backup/restore, PWA, production hardening, deployment docs, cost docs**.
