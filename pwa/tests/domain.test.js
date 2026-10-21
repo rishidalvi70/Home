@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { buildRevision, incrementReminders, obStatus, obOutstanding, obReceived, obligationsToCreate, previewObligations, rentFor, suggestedNewRent, revisionPercent } from "../js/domain/rent.js";
 import { billOutstanding, billPaid, billStatus, myShare } from "../js/domain/bills.js";
 import { dueState, installmentsLeft, monthlyCost, recordPayment, remainingAmount, totalPaid, withAnchor } from "../js/domain/commitments.js";
-import { monthFigures, outstandingRent, upcomingItems } from "../js/domain/dashboard.js";
+import { dashboardSummary, dueThisMonth, monthFigures, outstandingRent, upcomingItems } from "../js/domain/dashboard.js";
 import { propertyReport } from "../js/domain/reports.js";
 
 const R = (n) => n * 100; // rupees -> paise
@@ -253,4 +253,39 @@ test("property report separates owner spend from tenant-paid bills", () => {
   assert.equal(r.ownerTotal, R(700));
   assert.equal(r.tenantPaidRecorded, R(300));
   assert.equal(r.netCashFlow, R(4300));
+});
+
+
+test("still-to-pay lists unpaid bills, plans, EMIs and SIPs due by month end, and matches the dashboard", () => {
+  const s = empty();
+  s.properties = [prop(1, "Room 2")];
+  s.income = [{ receivedOn: "2026-10-01", kind: "salary", amount: R(85000) }];
+  s.expenses = [{ spentOn: "2026-10-03", category: "Groceries", amount: R(7000) }];
+  s.bills = [bill({ id: 1, name: "Light", amount: R(1450), dueDate: "2026-10-28" }), bill({ id: 2, name: "Gas", amount: R(500), dueDate: "2026-11-02" }),
+    bill({ id: 3, name: "Tenant water", responsible: "tenant", dueDate: "2026-10-10" })];
+  s.commitments = [
+    commit({ id: 1, name: "Netflix", amount: R(649), nextDueDate: "2026-10-25" }),
+    commit({ id: 2, kind: "emi", name: "Bike loan", amount: R(4200), nextDueDate: "2026-10-28" }),
+    commit({ id: 3, kind: "sip", name: "Index fund", amount: R(5000), nextDueDate: "2026-10-10" }),
+    commit({ id: 4, name: "Old overdue", amount: R(100), nextDueDate: "2026-09-15" }),
+    commit({ id: 5, name: "Next month", amount: R(900), nextDueDate: "2026-11-05" }),
+    commit({ id: 6, name: "Cancelled", amount: R(900), nextDueDate: "2026-10-05", status: "cancelled" }),
+  ];
+  const due = dueThisMonth(s, "2026-10-01", "2026-10-21");
+  assert.deepEqual(due.map((d) => d.label), ["Old overdue", "Index fund", "Netflix", "Light (Room 2)", "Bike loan"]);
+  assert.deepEqual(due.filter((d) => d.overdue).map((d) => d.label), ["Old overdue", "Index fund"]);
+  assert.equal(due.find((d) => d.label === "Index fund").investment, true);
+  const total = due.reduce((n, d) => n + d.amount, 0);
+  assert.equal(total, R(100 + 5000 + 649 + 1450 + 4200));
+  const sum = dashboardSummary(s, "2026-10-01", "2026-10-21");
+  assert.equal(sum.stillToPay, total);
+  assert.equal(sum.leftAfterDues, R(85000 - 7000) - total); // nothing paid yet except the 7,000 groceries
+  // paying Netflix (due date moves to next month) lowers still-to-pay and raises spending by the same amount
+  const paid = recordPayment(s.commitments[0], [], { amount: R(649), paidOn: "2026-10-21" });
+  s.commitments[0] = paid.commitment;
+  s.commitmentPayments = [{ ...paid.payment, commitmentId: 1 }];
+  const after = dashboardSummary(s, "2026-10-01", "2026-10-21");
+  assert.equal(after.stillToPay, total - R(649));
+  assert.equal(after.month.remaining, sum.month.remaining - R(649));
+  assert.equal(after.leftAfterDues, sum.leftAfterDues);
 });

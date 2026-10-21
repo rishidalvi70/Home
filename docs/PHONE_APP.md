@@ -43,6 +43,14 @@ After that it opens from the home screen like any app, **even in airplane mode**
 * **Salary:** tap **Add salary** on the dashboard (or **Salary & income → Add income**). The form is prefilled from your
   last salary, so each month is: check the amount, Save. Your salary counts toward "Money in" and "Left so far".
 
+## "Left" money: paid vs still to pay
+* **Left so far** = money in − what you have *actually paid* − invested. Adding a subscription, EMI or plan does **not** lower
+  it until you record a payment.
+* **Still to pay this month** lists everything added but not yet paid (bills, plans, EMIs, SIPs, anything overdue).
+  Tap **Paid** on a row to record it as paid today; the plan's next due date moves forward.
+* **Left after all dues** = Left so far − Still to pay. This is what you will have if everything due gets paid.
+  Both screens (Dashboard and Personal overview) show it.
+
 ## 3. Your data and backups (important)
 Your records are stored **only inside that phone's browser storage**.
 
