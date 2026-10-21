@@ -43,6 +43,12 @@ After that it opens from the home screen like any app, **even in airplane mode**
 * **Salary:** tap **Add salary** on the dashboard (or **Salary & income → Add income**). The form is prefilled from your
   last salary, so each month is: check the amount, Save. Your salary counts toward "Money in" and "Left so far".
 
+## Marking a bill paid
+**Property bills** → tap the green **Paid** button under the bill's name (or open the bill and tap **Mark ₹… paid**). It
+records what you still owe on that bill as paid today. The same button is on the room's page and in **Personal overview →
+Still to pay**. For a part payment or another date, open the bill and use **Record a payment**. Bills the tenant pays
+have no button (they aren't yours to pay); set **Tenant payment** on the bill to Reported or Confirmed instead.
+
 ## "Left" money: paid vs still to pay
 * **Left so far** = money in − what you have *actually paid* − invested. Adding a subscription, EMI or plan does **not** lower
   it until you record a payment.

@@ -170,7 +170,7 @@ def test_full_workflow_offline_then_backup_erase_restore(page, ctx, tmp_path):
     page.fill("#rent-pay-amount", "3000")
     submit(page, "rent-pay")
     expect(page.locator("#toasts")).to_contain_text("Payment recorded.")
-    assert stat_value(page, "Outstanding") == "₹5,000"
+    expect(page.locator('.stat-card:has-text("Outstanding") .stat-value').first).to_have_text("₹5,000")
     # exact duplicate is refused
     page.fill("#rent-pay-amount", "3000")
     submit(page, "rent-pay")
@@ -365,7 +365,8 @@ def test_old_entries_and_deleting_rooms(page):
     page.fill("#old-rent-receivedAmount", "8000")
     submit(page, "old-rent")
     expect(page.locator("#toasts")).to_contain_text("Rent record added.")
-    assert stat_value(page, "Received") == "\u20b98,000" and stat_value(page, "Outstanding") == "\u20b90"
+    expect(page.locator('.stat-card:has-text("Received") .stat-value').first).to_have_text("\u20b98,000")
+    expect(page.locator('.stat-card:has-text("Outstanding") .stat-value').first).to_have_text("\u20b90")
     go(page, "/rent/new?tenant=1&month=2025-06")
     submit(page, "old-rent")
     expect(page.locator('form[data-form="old-rent"]')).to_contain_text("already a rent record")
@@ -537,4 +538,49 @@ def test_personal_overview_shows_left_after_dues_and_paid_button(page):
     # the dashboard agrees
     go(page, "/")
     assert stat_value(page, "Left after all dues") == "₹73,151"
+    assert page.errors == [], page.errors
+
+
+def test_mark_a_bill_paid_from_the_list_the_bill_and_the_room(page):
+    go(page, "/bills/new?property=2")
+    page.fill("#bill-name", "Light bill")
+    page.fill("#bill-amount", "1450")
+    page.fill("#bill-dueDate", TODAY.isoformat())
+    submit(page, "bill")
+    expect(page.locator("#toasts")).to_contain_text("Bill added.")
+    # a bill the tenant pays has nothing for me to mark paid
+    go(page, "/bills/new?property=2")
+    page.fill("#bill-name", "Tenant water")
+    page.fill("#bill-amount", "300")
+    page.select_option("#bill-responsible", "tenant")
+    submit(page, "bill")
+    expect(page.locator("#toasts")).to_contain_text("Bill added.")
+
+    go(page, "/bills")
+    expect(page.locator('[data-action="pay-due"]')).to_have_count(1)  # only my bill
+    expect(page.locator('tr:has-text("Light bill") [data-action="pay-due"]')).to_be_visible()
+    page.click('tr:has-text("Light bill") [data-action="pay-due"]')
+    expect(page.locator("#toasts")).to_contain_text("marked as paid")
+    expect(page.locator('tr:has-text("Light bill")')).to_contain_text("Paid")
+    expect(page.locator('[data-action="pay-due"]')).to_have_count(0)
+
+    # the bill page agrees: fully paid, one payment, no button
+    page.click('a:has-text("Light bill")')
+    expect(page.locator('.page-actions [data-action="pay-due"]')).to_have_count(0)
+    expect(page.locator("#view")).to_contain_text("₹1,450.00")
+
+    # a second bill: use the button on the room page and on the bill page
+    go(page, "/bills/new?property=2")
+    page.fill("#bill-name", "Gas bill")
+    page.fill("#bill-amount", "800")
+    submit(page, "bill")
+    expect(page.locator("#toasts")).to_contain_text("Bill added.")
+    page.click('.page-actions [data-action="pay-due"]')
+    expect(page.locator("#toasts")).to_contain_text("marked as paid")
+    expect(page.locator('.page-actions [data-action="pay-due"]')).to_have_count(0)
+    go(page, "/properties/2")
+    expect(page.locator('[data-action="pay-due"]')).to_have_count(0)
+    # spending shows it: 1,450 + 800 paid this month
+    go(page, "/")
+    assert stat_value(page, "Property bills") == "₹2,250"
     assert page.errors == [], page.errors

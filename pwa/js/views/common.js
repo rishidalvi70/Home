@@ -1,4 +1,5 @@
 import { L } from "../constants.js";
+import { billOutstanding } from "../domain/bills.js";
 import { html, raw } from "../lib/html.js";
 
 export const STATUS_STYLES = {
@@ -37,3 +38,7 @@ export const monthNav = (label, prevHref, nextHref) => html`<div class="d-flex a
   <strong class="px-2">${label}</strong>
   <a class="btn btn-outline-secondary" href="${nextHref}" aria-label="Next month"><i class="bi bi-chevron-right"></i></a></div>`;
 export const kindLabel = (k) => L.kind[k] || k;
+
+/** One-tap "Paid" for a bill I still owe on (tenant/other-paid and cancelled bills have nothing for me to pay). */
+export const paidButton = (bill, payments) => (billOutstanding(bill, payments)
+  ? html`<div class="mt-1">${actionBtn("pay-due", "Paid", { type: "bill", id: bill.id }, "btn btn-sm btn-success", "check2")}</div>` : "");

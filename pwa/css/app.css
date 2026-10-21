@@ -93,7 +93,7 @@ textarea.form-control { min-height: 0; }
 .nav-pills .nav-link { border-radius: 999px; }
 .nav-pills .nav-link.active { background: var(--brand); }
 .chart-box { position: relative; height: 280px; }
-.filter-bar { display: flex; flex-wrap: wrap; gap: .6rem; align-items: end; }
+.filter-bar { display: flex; flex-direction: row; flex-wrap: wrap; gap: .6rem; align-items: end; } /* row: it also sits inside .card, which is a column */
 .filter-bar > * { min-width: 9rem; flex: 1 1 9rem; max-width: 16rem; }
 .login-wrap { min-height: 80vh; display: flex; align-items: center; justify-content: center; }
 .login-card { width: 100%; max-width: 420px; }

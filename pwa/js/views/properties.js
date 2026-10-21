@@ -8,7 +8,7 @@ import { fyStart, formatDate, monthStart, todayISO } from "../lib/dates.js";
 import { html } from "../lib/html.js";
 import { inr } from "../lib/money.js";
 import { FieldErrors, actions, formHtml, navigate, refresh, toast } from "../ui/core.js";
-import { actionBtn, badge, card, empty, kv, pageHeader, responsive } from "./common.js";
+import { actionBtn, badge, card, empty, kv, pageHeader, paidButton, responsive } from "./common.js";
 
 const text = (name, label, extra = {}) => ({ name, label, type: "text", max: 200, ...extra });
 const area = (name, label) => ({ name, label, type: "textarea", max: 4000 });
@@ -160,7 +160,7 @@ export async function detail({ params, query }) {
         : html`<div class="card-body">${empty("No rent generated yet. Use Rent → Generate.")}</div>`, "h-100")}</div>
     <div class="col-12 col-xl-6">${card(html`<div class="d-flex justify-content-between align-items-center"><span>Recent bills</span><a class="btn btn-sm btn-outline-primary" href="#/bills/new?property=${id}"><i class="bi bi-plus-lg"></i> Add bill</a></div>`,
       bills.length ? responsive(html`<table class="table"><thead><tr><th>Bill</th><th>Amount</th><th>Who pays</th><th>Status</th></tr></thead><tbody>
-        ${bills.map((b) => html`<tr><td><a href="#/bills/${b.id}">${b.name}</a><div class="small text-muted">${L.category[b.category]}${b.billNumber ? ` · #${b.billNumber}` : ""}</div></td><td>${inr(b.amount)}</td><td>${L.responsible[b.responsible]}</td><td>${badge(billStatus(b, snap.billPayments, today))}</td></tr>`)}</tbody></table>`)
+        ${bills.map((b) => html`<tr><td><a href="#/bills/${b.id}">${b.name}</a><div class="small text-muted">${L.category[b.category]}${b.billNumber ? ` · #${b.billNumber}` : ""}</div>${paidButton(b, snap.billPayments)}</td><td>${inr(b.amount)}</td><td>${L.responsible[b.responsible]}</td><td>${badge(billStatus(b, snap.billPayments, today))}</td></tr>`)}</tbody></table>`)
         : html`<div class="card-body">${empty("No bills recorded for this room.")}</div>`, "h-100")}</div>
   </div>`;
   return { title: prop.name, html: body };

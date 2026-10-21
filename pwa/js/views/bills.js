@@ -6,7 +6,7 @@ import { formatDate, todayISO } from "../lib/dates.js";
 import { html } from "../lib/html.js";
 import { inr, sum } from "../lib/money.js";
 import { actions, formHtml, navigate, refresh, toast } from "../ui/core.js";
-import { actionBtn, badge, byId, card, empty, kv, optionsOf, pageHeader, responsive, stat, tableCard } from "./common.js";
+import { actionBtn, badge, byId, card, empty, kv, optionsOf, pageHeader, paidButton, responsive, stat, tableCard } from "./common.js";
 import { notFound } from "./properties.js";
 import { paymentSpec } from "./payments.js";
 
@@ -36,7 +36,7 @@ export async function list({ query }) {
       <div class="col-4">${stat("Paid by me", inr(sum(bills, (b) => billPaid(b, snap.billPayments))), "check2-circle", "success")}</div>
       <div class="col-4">${stat("Still to pay", inr(sum(bills, (b) => billOutstanding(b, snap.billPayments))), "hourglass-split", "danger")}</div></div>
     ${tableCard(bills.length ? responsive(html`<table class="table table-hover"><thead><tr><th>Bill</th><th>Room</th><th>Due</th><th>Amount</th><th>Who pays</th><th>I paid</th><th>Status</th></tr></thead><tbody>
-      ${bills.map((b) => html`<tr><td><a href="#/bills/${b.id}">${b.name}</a><div class="small text-muted">${L.category[b.category]}${b.billNumber ? ` · #${b.billNumber}` : ""}${b.periodLabel ? ` · ${b.periodLabel}` : ""}</div></td>
+      ${bills.map((b) => html`<tr><td><a href="#/bills/${b.id}">${b.name}</a><div class="small text-muted">${L.category[b.category]}${b.billNumber ? ` · #${b.billNumber}` : ""}${b.periodLabel ? ` · ${b.periodLabel}` : ""}</div>${paidButton(b, snap.billPayments)}</td>
         <td>${props.get(b.propertyId)?.name}</td><td>${formatDate(b.dueDate)}</td><td>${inr(b.amount)}</td>
         <td>${L.responsible[b.responsible]}${["tenant", "other"].includes(b.responsible) && b.tenantPaymentState !== "not_reported" ? html`<div class="small text-muted">${b.tenantPaymentState.replace("_", " ")}</div>` : ""}</td>
         <td>${inr(billPaid(b, snap.billPayments))}</td><td>${badge(status(b))}</td></tr>`)}</tbody></table>`)
@@ -100,7 +100,7 @@ export async function editBill({ params }) {
     async onSubmit(v) { await db.put("billPayments", { billId: id, amount: v.amount, paidOn: v.paidOn, method: v.method, reference: v.reference, notes: v.notes }); toast("Payment recorded."); refresh(); } });
   const canPay = myShare(bill) > 0 && !bill.isCancelled;
   return { title: bill.name, html: html`${pageHeader(bill.name, `${props.get(bill.propertyId)?.name} · ${L.category[bill.category]}`, html`
-      <a class="btn btn-outline-secondary" href="#/bills"><i class="bi bi-arrow-left"></i> All bills</a>${actionBtn("delete-bill", "Delete", { id }, "btn btn-outline-danger", "trash")}`)}
+      <a class="btn btn-outline-secondary" href="#/bills"><i class="bi bi-arrow-left"></i> All bills</a>${out > 0 ? actionBtn("pay-due", `Mark ${inr(out)} paid`, { type: "bill", id }, "btn btn-success", "check2") : ""}${actionBtn("delete-bill", "Delete", { id }, "btn btn-outline-danger", "trash")}`)}
     <div class="row g-3"><div class="col-12 col-xl-7"><div class="card"><div class="card-body">${formHtml(billSpec(snap, bill))}</div></div></div>
     <div class="col-12 col-xl-5">
       <div class="mb-3">${card(html`Status ${badge(status)}`, html`<div class="card-body">${kv([
