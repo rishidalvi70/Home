@@ -502,3 +502,39 @@ def test_mark_rent_received_in_one_tap_and_add_salary(page):
     assert page.input_value("#income-amount") == "85000" and page.input_value("#income-source") == "Employer"
     expect(page.locator("#view")).to_contain_text("Prefilled from your last salary")
     assert page.errors == [], page.errors
+
+
+def test_personal_overview_shows_left_after_dues_and_paid_button(page):
+    # salary, an everyday expense, and two plans due this month that are not paid yet
+    go(page, "/income/new")
+    page.fill("#income-amount", "85000")
+    submit(page, "income")
+    expect(page.locator("#toasts")).to_contain_text("Income added.")
+    go(page, "/expenses/new")
+    page.fill("#expenses-amount", "7000")
+    submit(page, "expenses")
+    expect(page.locator("#toasts")).to_contain_text("Expense added.")
+    for name, amount, kind in (("Netflix", "649", "subscription"), ("Bike loan", "4200", "emi")):
+        go(page, f"/commitments/new?kind={kind}")
+        page.fill("#commitment-name", name)
+        page.fill("#commitment-amount", amount)
+        page.fill("#commitment-nextDueDate", TODAY.isoformat())
+        submit(page, "commitment")
+        expect(page.locator("#toasts")).to_contain_text("added.")
+    go(page, "/personal")
+    assert stat_value(page, "Left so far") == "₹78,000"  # only paid things count
+    assert stat_value(page, "Still to pay this month") == "₹4,849"
+    assert stat_value(page, "Left after all dues") == "₹73,151"
+    expect(page.locator("#view")).to_contain_text("Netflix")
+    expect(page.locator("#view")).to_contain_text("Bike loan")
+    # mark Netflix paid in one tap: spending goes up, still-to-pay goes down, left-after-dues is unchanged
+    page.locator('tr:has-text("Netflix") [data-action="pay-due"]').click()
+    expect(page.locator("#toasts")).to_contain_text("marked as paid")
+    expect(page.locator('.stat-card:has-text("Left so far") .stat-value').first).to_have_text("₹77,351")
+    assert stat_value(page, "Still to pay this month") == "₹4,200"
+    assert stat_value(page, "Left after all dues") == "₹73,151"
+    expect(page.locator("#view tr:has-text('Netflix')")).to_have_count(0)  # its next due date moved to next month
+    # the dashboard agrees
+    go(page, "/")
+    assert stat_value(page, "Left after all dues") == "₹73,151"
+    assert page.errors == [], page.errors

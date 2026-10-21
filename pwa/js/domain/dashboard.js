@@ -102,17 +102,34 @@ export function upcomingItems(snap, days, today = todayISO()) {
   return items.map((i) => ({ ...i, overdue: i.date < today }));
 }
 
+/** Everything still to be paid for a month (and anything overdue from before): unpaid bills, plans, EMIs, SIPs. */
+export function dueThisMonth(snap, start, today = todayISO()) {
+  const end = addMonths(start, 1);
+  const prop = new Map(snap.properties.map((p) => [p.id, p]));
+  const items = [];
+  for (const b of snap.bills) {
+    if (b.isCancelled || !b.dueDate || b.dueDate >= end) continue;
+    const out = billOutstanding(b, snap.billPayments);
+    if (out > 0) items.push({ type: "bill", id: b.id, label: `${b.name} (${prop.get(b.propertyId)?.name ?? "?"})`, kind: "Bill", amount: out, date: b.dueDate, href: `#/bills/${b.id}`, investment: false });
+  }
+  for (const c of snap.commitments) {
+    if (c.status !== "active" || !c.nextDueDate || c.nextDueDate >= end) continue;
+    items.push({ type: "commitment", id: c.id, label: c.name, kind: L.kind[c.kind] || c.kind, amount: c.amount, date: c.nextDueDate, href: `#/commitments/${c.id}`, investment: INVESTMENT_KINDS.has(c.kind) });
+  }
+  items.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  return items.map((i) => ({ ...i, overdue: i.date < today }));
+}
+
 export function dashboardSummary(snap, start, today = todayISO()) {
   const end = addMonths(start, 1);
   const month = monthFigures(snap, start);
   const counts = {};
   for (const p of snap.properties) if (!p.archivedAt) add(counts, p.occupancyStatus, 1);
 
-  let dueBills = 0;
-  for (const b of snap.bills) if (!b.isCancelled && b.dueDate && b.dueDate < end) dueBills += billOutstanding(b, snap.billPayments);
-  const dueSoon = snap.commitments.filter((c) => c.status === "active" && c.nextDueDate && c.nextDueDate < end);
-  const dueCommitments = sum(dueSoon.filter((c) => !INVESTMENT_KINDS.has(c.kind)), (c) => c.amount);
-  const dueInvestments = sum(dueSoon.filter((c) => INVESTMENT_KINDS.has(c.kind)), (c) => c.amount);
+  const due = dueThisMonth(snap, start, today);
+  const dueBills = sum(due.filter((i) => i.type === "bill"), (i) => i.amount);
+  const dueCommitments = sum(due.filter((i) => i.type === "commitment" && !i.investment), (i) => i.amount);
+  const dueInvestments = sum(due.filter((i) => i.investment), (i) => i.amount);
   const stillToPay = dueBills + dueCommitments + dueInvestments;
 
   const history = [];

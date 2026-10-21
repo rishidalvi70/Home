@@ -1,7 +1,8 @@
 import { db } from "../db.js";
 import { EXPENSE_CATEGORIES, FREQUENCIES, INCOME_KINDS, INVESTMENT_TYPES, KINDS, KIND_ICONS, L, STATUSES, METHODS } from "../constants.js";
 import { dueState, installmentsLeft, isInvestment, monthlyCost, paymentsOf, recordPayment, remainingAmount, totalPaid, withAnchor } from "../domain/commitments.js";
-import { monthFigures } from "../domain/dashboard.js";
+import { dueThisMonth, monthFigures } from "../domain/dashboard.js";
+import { billOutstanding } from "../domain/bills.js";
 import { addMonths, formatDate, monthLabel, parseMonth, todayISO } from "../lib/dates.js";
 import { html } from "../lib/html.js";
 import { inr, sum } from "../lib/money.js";
@@ -24,13 +25,25 @@ export async function overview({ query }) {
   const by = (k) => active.filter((c) => c.kind === k);
   const holdings = snap.investments.filter((h) => h.isActive !== false);
   const emiLeft = sum(by("emi"), (c) => remainingAmount(c, snap.commitmentPayments) || 0);
+  const due = dueThisMonth(snap, start, todayISO());
+  const stillToPay = sum(due, (i) => i.amount);
+  const leftAfterDues = figs.remaining - stillToPay;
   return { title: "Personal overview", html: html`${pageHeader("Personal overview", "Your own money this month – actual cash in and out")}
     ${monthNav(monthLabel(start), `#/personal?month=${addMonths(start, -1).slice(0, 7)}`, `#/personal?month=${addMonths(start, 1).slice(0, 7)}`)}
     <div class="row g-3">
       <div class="col-6 col-lg-3">${stat("Salary received", inr(figs.salary), "wallet2", "success")}</div>
       <div class="col-6 col-lg-3">${stat("My rent received", inr(figs.rentReceivedMine), "cash-coin", "success", "Rooms where I collect rent")}</div>
       <div class="col-6 col-lg-3">${stat("Spent (actual)", inr(figs.totalExpenses), "cart", "danger", "Bills, plans, EMIs, everyday")}</div>
-      <div class="col-6 col-lg-3">${stat("Left this month", inr(figs.remaining), "piggy-bank", "primary", "After spending & investing")}</div></div>
+      <div class="col-6 col-lg-3">${stat("Left so far", inr(figs.remaining), "piggy-bank", "primary", "Money in − what I've paid − invested")}</div>
+      <div class="col-6 col-lg-3">${stat("Still to pay this month", inr(stillToPay), "hourglass-split", "warning", "Added but not yet marked paid")}</div>
+      <div class="col-6 col-lg-3">${stat("Left after all dues", inr(leftAfterDues), "wallet2", leftAfterDues >= 0 ? "success" : "danger", "If everything due is paid")}</div></div>
+    <p class="small text-muted mt-2 mb-0"><i class="bi bi-info-circle"></i> “Left so far” counts only payments you have actually made. A subscription, EMI or plan you add counts as spending once you mark it paid – until then it is in “Still to pay”.</p>
+    <div class="section-title">Still to pay this month</div>
+    ${card("", due.length ? responsive(html`<table class="table"><thead><tr><th>Due</th><th>What</th><th class="text-end">Amount</th></tr></thead><tbody>
+      ${due.map((i) => html`<tr><td class="text-nowrap">${formatDate(i.date)}${i.overdue ? html` <span class="badge badge-soft text-bg-danger">overdue</span>` : ""}</td>
+        <td><a href="${i.href}">${i.label}</a><div class="small text-muted">${i.kind}${i.investment ? " · investment" : ""}</div>
+        <div class="mt-1">${actionBtn("pay-due", "Paid", { type: i.type, id: i.id }, "btn btn-sm btn-success", "check2")}</div></td><td class="text-end">${inr(i.amount)}</td></tr>`)}</tbody></table>`)
+      : html`<div class="card-body">${empty("Nothing left to pay this month.")}</div>`)}
     <div class="section-title">Where it went</div>
     <div class="row g-3">
       <div class="col-12 col-lg-6">${card("Spending by type", Object.keys(figs.categories).length ? html`<table class="table"><tbody>
@@ -262,3 +275,23 @@ export const members = simple({ slug: "members", store: "members", title: "Famil
     toast("Deleted.", "info"); await db.remove("members", row.id); return true;
   } });
 for (const s of [income, expenses, investments, members]) s.register();
+
+/** One tap: the item was paid in full today. Plans move to their next due date; bills record the outstanding amount. */
+actions["pay-due"] = async ({ type, id }) => {
+  const snap = await db.loadAll();
+  const today = todayISO();
+  if (type === "bill") {
+    const b = snap.bills.find((x) => x.id === Number(id));
+    const out = billOutstanding(b, snap.billPayments);
+    if (!out || !confirm(`Mark ${inr(out, 2)} for "${b.name}" as paid today?`)) return;
+    await db.put("billPayments", { billId: b.id, amount: out, paidOn: today, method: null, reference: null, notes: "Marked paid" });
+    toast(`${inr(out)} marked as paid.`);
+  } else {
+    const c = snap.commitments.find((x) => x.id === Number(id));
+    if (!confirm(`Record ${inr(c.amount, 2)} for "${c.name}" as paid today? Its next due date moves forward.\n\nFor a different amount or date, open it and use "Record a payment".`)) return;
+    const { commitment, payment } = recordPayment(c, paymentsOf(c, snap.commitmentPayments), { amount: c.amount, paidOn: today, notes: "Marked paid", advanceDue: true });
+    await db.batch(["commitments", "commitmentPayments"], async (tx) => { await tx.put("commitments", commitment); await tx.put("commitmentPayments", payment); });
+    toast(`${inr(c.amount)} marked as paid.${commitment.nextDueDate ? ` Next due ${formatDate(commitment.nextDueDate)}.` : ""}`);
+  }
+  refresh();
+};
