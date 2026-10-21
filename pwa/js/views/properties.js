@@ -4,6 +4,7 @@ import { billStatus } from "../domain/bills.js";
 import { obReceived, obStatus, buildRevision, revisionChange, revisionPercent, suggestedNewRent, rentFor } from "../domain/rent.js";
 import { describe, propertyCascade, propertyKind, tenantCascade, total } from "../domain/cascade.js";
 import { propertyReport } from "../domain/reports.js";
+import { deleteCascade } from "../cascadeDelete.js";
 import { fyStart, formatDate, monthStart, todayISO } from "../lib/dates.js";
 import { html } from "../lib/html.js";
 import { inr } from "../lib/money.js";
@@ -259,11 +260,7 @@ actions["delete-property"] = async ({ id }) => {
     const typed = prompt(`Delete "${prop.name}" and ALL its records: ${describe(cascade)}?\n\nThis can't be undone. (Tip: Archive keeps the history and hides the room. Download a backup first if unsure.)\n\nType DELETE to confirm.`);
     if (typed !== "DELETE") { toast("Nothing was deleted.", "info"); return; }
   }
-  await db.batch(["properties", "connections", "tenants", "revisions", "obligations", "rentPayments", "bills", "billPayments"], async (tx) => {
-    for (const [store, list] of [["billPayments", cascade.billPayments], ["bills", cascade.bills], ["rentPayments", cascade.rentPayments], ["obligations", cascade.obligations],
-      ["revisions", cascade.revisions], ["tenants", cascade.tenants], ["connections", cascade.connections]]) for (const x of list) await tx.remove(store, x);
-    await tx.remove("properties", pid);
-  });
+  await deleteCascade(cascade, ["properties", pid]);
   toast(`${prop.name} deleted.`, "info"); navigate("/properties");
 };
 actions["delete-connection"] = async ({ id }) => {
@@ -290,10 +287,7 @@ actions["delete-tenant"] = async ({ id }) => {
     const typed = prompt(`Delete ${t.name} and their records: ${describe(cascade)}?\n\nThis can't be undone. (To keep the history, use "End tenancy" instead.)\n\nType DELETE to confirm.`);
     if (typed !== "DELETE") { toast("Nothing was deleted.", "info"); return; }
   }
-  await db.batch(["tenants", "revisions", "obligations", "rentPayments"], async (tx) => {
-    for (const [store, list] of [["rentPayments", cascade.rentPayments], ["obligations", cascade.obligations], ["revisions", cascade.revisions]]) for (const x of list) await tx.remove(store, x);
-    await tx.remove("tenants", tid);
-  });
+  await deleteCascade(cascade, ["tenants", tid]);
   toast("Tenant deleted.", "info"); refresh();
 };
 actions["delete-revision"] = async ({ id }) => {

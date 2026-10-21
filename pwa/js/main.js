@@ -8,6 +8,7 @@ import * as bills from "./views/bills.js";
 import { dashboard } from "./views/dashboard.js";
 import * as personal from "./views/personal.js";
 import * as props from "./views/properties.js";
+import * as receipts from "./views/receipts.js";
 import * as rent from "./views/rent.js";
 
 route("/", dashboard);
@@ -34,6 +35,7 @@ route("/commitments/:id", personal.editCommitment);
 for (const [slug, mod] of [["income", personal.income], ["expenses", personal.expenses], ["investments", personal.investments], ["members", personal.members]]) {
   route(`/${slug}`, mod.list); route(`/${slug}/new`, mod.newForm); route(`/${slug}/:id`, mod.editForm);
 }
+route("/receipts", receipts.library);
 route("/backup", backup.page);
 
 const NAV = [
@@ -55,6 +57,7 @@ const NAV = [
   ["/investments", "piggy-bank", "Investments", (p) => p.startsWith("/investments")],
   ["/members", "people", "Family members", (p) => p.startsWith("/members")],
   ["heading", "Data"],
+  ["/receipts", "folder2-open", "Receipts", (p) => p === "/receipts"],
   ["/backup", "shield-lock", "Backup & data", (p) => p === "/backup"],
 ];
 
@@ -115,7 +118,12 @@ async function boot() {
   setHooks({ afterRender: ({ path, query }) => { renderNav(path, query); updateBackupBanner();
     document.getElementById("navDrawer")?.classList.contains("show") && window.bootstrap?.Offcanvas.getInstance(document.getElementById("navDrawer"))?.hide(); } });
   setupServiceWorker();
+  await receipts.importSharedFiles().catch((e) => console.warn("Shared files not imported:", e));
   await startRouter();
+  // Files shared while the app is already open arrive when it comes back to the front.
+  document.addEventListener("visibilitychange", async () => {
+    if (document.visibilityState === "visible" && (await receipts.importSharedFiles().catch(() => 0))) location.hash = "#/receipts";
+  });
 }
 window.addEventListener("online", () => document.getElementById("offline-pill")?.setAttribute("hidden", ""));
 window.addEventListener("offline", () => document.getElementById("offline-pill")?.removeAttribute("hidden"));

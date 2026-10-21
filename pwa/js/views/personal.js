@@ -10,6 +10,9 @@ import { actions, formHtml, navigate, refresh, toast } from "../ui/core.js";
 import { actionBtn, badge, byId, card, empty, kv, monthNav, pageHeader, responsive, stat, tableCard } from "./common.js";
 import { notFound } from "./properties.js";
 import { paymentSpec } from "./payments.js";
+import { commitmentPaymentCascade, describe, total } from "../domain/cascade.js";
+import { deleteCascade } from "../cascadeDelete.js";
+import { hydrateThumbs, receiptsInline } from "./receipts.js";
 
 const money = (name, label, extra = {}) => ({ name, label, type: "money", ...extra });
 const text = (name, label, extra = {}) => ({ name, label, type: "text", max: 200, ...extra });
@@ -182,8 +185,9 @@ export async function editCommitment({ params }) {
         ...(c.kind === "emi" && left != null ? [["Installments left", `${left} of ${c.totalInstallments}`], ["Still to repay", inr(remainingAmount(c, snap.commitmentPayments))]] : []),
         ...(c.kind === "mobile" && c.planType === "prepaid" ? [["Plan expires", formatDate(c.expiryDate)]] : [])])}</div>`)}</div>
       <div class="mb-3">${card("Payment history", pays.length ? responsive(html`<table class="table"><tbody>${pays.map((p) => html`<tr><td>${formatDate(p.paidOn)}<div class="small text-muted">${p.method || ""} ${p.reference || ""}</div></td><td>${inr(p.amount, 2)}</td>
-        <td class="text-end">${actionBtn("delete-commitment-payment", "Delete", { id: p.id })}</td></tr>`)}</tbody></table>`) : html`<div class="card-body">${empty("No payments recorded yet.")}</div>`)}</div>
-      ${c.status === "active" ? card("Record a payment", html`<div class="card-body">${formHtml(paySpec)}</div>`) : ""}</div></div>` };
+        <td class="text-end">${actionBtn("delete-commitment-payment", "Delete", { id: p.id })}</td></tr>
+        <tr><td colspan="3" class="border-0 pt-0"><div class="small text-muted mb-1">Receipt for this payment</div>${receiptsInline(snap, "commitmentPayment", p.id)}</td></tr>`)}</tbody></table>`) : html`<div class="card-body">${empty("No payments recorded yet.")}</div>`)}</div>
+      ${c.status === "active" ? card("Record a payment", html`<div class="card-body">${formHtml(paySpec)}</div>`) : ""}</div></div>`, after: (root) => hydrateThumbs(root) };
 }
 
 actions["delete-commitment"] = async ({ id }) => {
@@ -195,8 +199,12 @@ actions["delete-commitment"] = async ({ id }) => {
   navigate(`/commitments?kind=${c.kind}`);
 };
 actions["delete-commitment-payment"] = async ({ id }) => {
-  if (!confirm("Delete this payment? Check the next due date is still right afterwards.")) return;
-  await db.remove("commitmentPayments", Number(id)); toast("Payment removed. Check the next due date is still right.", "info"); refresh();
+  const pid = Number(id);
+  const snap = await db.loadAll();
+  const cascade = commitmentPaymentCascade(snap, pid);
+  if (!confirm(`Delete this payment${total(cascade) ? ` and ${describe(cascade)}` : ""}? Check the next due date is still right afterwards.`)) return;
+  await deleteCascade(cascade, ["commitmentPayments", pid]);
+  toast("Payment removed. Check the next due date is still right.", "info"); refresh();
 };
 
 /* ---------- simple lists ---------- */

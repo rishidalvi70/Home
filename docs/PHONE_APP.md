@@ -43,6 +43,28 @@ After that it opens from the home screen like any app, **even in airplane mode**
 * **Salary:** tap **Add salary** on the dashboard (or **Salary & income → Add income**). The form is prefilled from your
   last salary, so each month is: check the amount, Save. Your salary counts toward "Money in" and "Left so far".
 
+## Receipts
+Attach the bill or the proof of payment to the thing it belongs to:
+* **A bill** (electricity, gas, maintenance…): open the bill → **Receipts** → **Take photo** or **Attach file**.
+* **A rent payment:** open the rent record → under the payment → **Take photo / Attach file**.
+* **A LIC, EMI or other plan payment:** open the plan → payment history → attach under the payment.
+
+Photos are shrunk automatically (a 6 MB camera photo becomes well under 2 MB); PDFs are kept as they are. Only photos and
+real PDFs are accepted (up to 25 MB each).
+
+**Receipts** (in the menu) is your folder view: **Room › Category › Year**, with names like `Room2_Electricity_2026-10.pdf`.
+Filter, search, **Open**, **Save** or **Delete** any receipt. **Download as folder (zip)** gives real folders
+(`Room 2/Electricity/2026/…`) to keep on a computer or Drive.
+
+**Share from other apps (Android):** in WhatsApp, Gmail, Files or Gallery, open a bill/photo → **Share → Home Finance**.
+It lands in the **Inbox** at the top of Receipts; pick which bill or payment it belongs to and tap **Attach**.
+(If Home Finance isn't in the Share list, remove the home-screen app and install it again once. iPhone/iPad can't share
+into web apps - use **Attach file** there.) Nothing is uploaded anywhere.
+
+**Backups now include receipts.** With receipts, **Download backup** makes a **.zip** (your records + every receipt file).
+**Restore** accepts that zip (or an old .json) and puts the files back exactly. A damaged zip is refused and nothing
+changes. Deleting a bill, payment or room deletes the receipts attached to it, and the confirmation tells you how many.
+
 ## Marking a bill paid
 **Property bills** → tap the green **Paid** button under the bill's name (or open the bill and tap **Mark ₹… paid**). It
 records what you still owe on that bill as paid today. The same button is on the room's page and in **Personal overview →
