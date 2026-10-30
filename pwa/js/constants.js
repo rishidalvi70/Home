@@ -31,9 +31,11 @@ export const L = {
   frequency: labelsOf(FREQUENCIES), income: labelsOf(INCOME_KINDS), investment: labelsOf(INVESTMENT_TYPES),
 };
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2; // 2 = receipts. Backups from version 1 still import.
 export const STORES = ["properties", "connections", "tenants", "revisions", "obligations", "rentPayments", "bills",
-  "billPayments", "commitments", "commitmentPayments", "income", "expenses", "investments", "members"];
+  "billPayments", "commitments", "commitmentPayments", "income", "expenses", "investments", "members", "receipts"];
+// Receipt files (photos/PDFs) live in their own store so lists never load them; they travel in the .zip backup.
+export const FILE_STORE = "receiptFiles";
 
 export const INITIAL_PROPERTIES = [["Room 1", "self_occupied"], ["Room 2", "rented"], ["Room 3", "rented"],
   ["Room 4", "rented"], ["Room 5", "rented"], ["Room 6", "under_development"]];

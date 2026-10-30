@@ -4,6 +4,7 @@ import { isValidISO, todayISO } from "../lib/dates.js";
 import { parseMoney, toInput } from "../lib/money.js";
 
 export const actions = {}; // name -> async (dataset, element, event)
+export const fileActions = {}; // name -> async (<input type=file>) - run when files are chosen
 const forms = new Map();
 const routes = [];
 let current = { path: "/", query: new URLSearchParams() };
@@ -194,8 +195,8 @@ async function submitForm(formEl) {
 export class FieldErrors extends Error { constructor(fieldErrors) { super("Invalid"); this.fieldErrors = fieldErrors; } }
 
 /* ---------- download helper ---------- */
-export function downloadFile(filename, text, type = "application/json") {
-  const url = URL.createObjectURL(new Blob([text], { type }));
+export function downloadFile(filename, data, type = "application/json") {
+  const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data], { type }));
   const a = Object.assign(document.createElement("a"), { href: url, download: filename });
   document.body.appendChild(a);
   a.click();
@@ -219,6 +220,12 @@ export function startRouter() {
   document.addEventListener("change", (ev) => {
     const el = ev.target.closest?.("[data-filter]");
     if (el) setQuery(el.dataset.filter, el.value);
+    const fileInput = ev.target.closest?.("input[type=file][data-file-action]");
+    if (fileInput) {
+      const fn = fileActions[fileInput.dataset.fileAction];
+      if (fn) Promise.resolve(fn(fileInput)).catch((e) => { console.error(e); toast(e.message || "Something went wrong.", "danger"); });
+      return;
+    }
     const form = ev.target.closest?.("form[data-form]");
     if (form) for (const w of form.querySelectorAll("[data-show-if]")) {
       const cond = JSON.parse(w.dataset.showIf);

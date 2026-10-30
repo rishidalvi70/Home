@@ -14,16 +14,16 @@ const snap = {
 };
 
 test("property cascade includes only that room's records", () => {
-  assert.deepEqual(propertyCascade(snap, 1), { tenants: [1, 2], revisions: [1], obligations: [1, 2], rentPayments: [1, 2], connections: [1], bills: [1], billPayments: [1] });
-  assert.deepEqual(propertyCascade(snap, 2), { tenants: [3], revisions: [2], obligations: [3], rentPayments: [3], connections: [2], bills: [2], billPayments: [2] });
+  assert.deepEqual(propertyCascade(snap, 1), { tenants: [1, 2], revisions: [1], obligations: [1, 2], rentPayments: [1, 2], connections: [1], bills: [1], billPayments: [1], receipts: [] });
+  assert.deepEqual(propertyCascade(snap, 2), { tenants: [3], revisions: [2], obligations: [3], rentPayments: [3], connections: [2], bills: [2], billPayments: [2], receipts: [] });
   assert.equal(total(propertyCascade({ ...snap, tenants: [], revisions: [], obligations: [], rentPayments: [], connections: [], bills: [], billPayments: [] }, 1)), 0);
 });
 
 test("tenant, obligation and bill cascades", () => {
-  assert.deepEqual(tenantCascade(snap, 1), { revisions: [1], obligations: [1], rentPayments: [1, 2] });
-  assert.deepEqual(tenantCascade(snap, 2), { revisions: [], obligations: [2], rentPayments: [] });
-  assert.deepEqual(obligationCascade(snap, 1), { rentPayments: [1, 2] });
-  assert.deepEqual(billCascade(snap, 2), { billPayments: [2] });
+  assert.deepEqual(tenantCascade(snap, 1), { revisions: [1], obligations: [1], rentPayments: [1, 2], receipts: [] });
+  assert.deepEqual(tenantCascade(snap, 2), { revisions: [], obligations: [2], rentPayments: [], receipts: [] });
+  assert.deepEqual(obligationCascade(snap, 1), { rentPayments: [1, 2], receipts: [] });
+  assert.deepEqual(billCascade(snap, 2), { billPayments: [2], receipts: [] });
 });
 
 test("confirmation wording", () => {

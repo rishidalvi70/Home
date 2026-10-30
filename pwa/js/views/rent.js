@@ -1,6 +1,8 @@
 import { db } from "../db.js";
 import { L } from "../constants.js";
-import { obligationCascade, describe, total } from "../domain/cascade.js";
+import { obligationCascade, describe, rentPaymentCascade, total } from "../domain/cascade.js";
+import { deleteCascade } from "../cascadeDelete.js";
+import { hydrateThumbs, receiptsInline } from "./receipts.js";
 import { obOutstanding, obReceived, obStatus, obligationsToCreate, previewObligations, rentFor } from "../domain/rent.js";
 import { addMonths, dueDateInMonth, formatDate, monthLabel, monthStart, parseMonth, todayISO } from "../lib/dates.js";
 import { html } from "../lib/html.js";
@@ -118,9 +120,10 @@ export async function obligation({ params }) {
       <div class="col-6 col-md-3">${stat("Status", badge(obStatus(ob, snap.rentPayments)), "flag", "secondary", `Rent goes to ${L.collector[prop?.rentCollectedBy]}`)}</div></div>
     <div class="row g-3"><div class="col-12 col-lg-7">${card("Payments", pays.length ? responsive(html`<table class="table"><thead><tr><th>Date</th><th>Amount</th><th>Method</th><th>Reference</th><th></th></tr></thead><tbody>
         ${pays.map((p) => html`<tr><td>${formatDate(p.paidOn)}${p.paidOn > ob.dueDate ? html` <span class="badge text-bg-warning">late</span>` : ""}</td><td>${inr(p.amount, 2)}</td><td>${p.method || "—"}</td><td>${p.reference || "—"}</td>
-          <td class="text-end">${actionBtn("delete-rent-payment", "Delete", { id: p.id })}</td></tr>`)}</tbody></table>`)
+          <td class="text-end">${actionBtn("delete-rent-payment", "Delete", { id: p.id })}</td></tr>
+          <tr><td colspan="5" class="border-0 pt-0"><div class="small text-muted mb-1">Receipt for this payment</div>${receiptsInline(snap, "rentPayment", p.id)}</td></tr>`)}</tbody></table>`)
         : html`<div class="card-body">${empty("No payments yet. Rent is never marked received automatically.")}</div>`)}</div>
-      <div class="col-12 col-lg-5">${card("Record a payment", html`<div class="card-body">${formHtml(spec)}</div>`)}</div></div>` };
+      <div class="col-12 col-lg-5">${card("Record a payment", html`<div class="card-body">${formHtml(spec)}</div>`)}</div></div>`, after: (root) => hydrateThumbs(root) };
 }
 
 actions["create-obligations"] = async ({ month }) => {
@@ -137,10 +140,6 @@ actions["toggle-obligation"] = async ({ id }) => {
   await db.put("obligations", { ...ob, isCancelled: !ob.isCancelled });
   toast(ob.isCancelled ? "Rent record reinstated." : "Rent record cancelled.", "info"); refresh();
 };
-actions["delete-rent-payment"] = async ({ id }) => {
-  if (!confirm("Delete this payment?")) return;
-  await db.remove("rentPayments", Number(id)); toast("Payment removed.", "info"); refresh();
-};
 actions["delete-obligation"] = async ({ id }) => {
   const oid = Number(id);
   const snap = await db.loadAll();
@@ -148,9 +147,18 @@ actions["delete-obligation"] = async ({ id }) => {
   const cascade = obligationCascade(snap, oid);
   const msg = total(cascade) ? `Delete this rent record and ${describe(cascade)}? This can't be undone.` : "Delete this rent record?";
   if (!confirm(msg)) return;
-  await db.batch(["obligations", "rentPayments"], async (tx) => { for (const x of cascade.rentPayments) await tx.remove("rentPayments", x); await tx.remove("obligations", oid); });
+  await deleteCascade(cascade, ["obligations", oid]);
   toast("Rent record deleted.", "info"); navigate(`/rent?month=${ob.periodStart.slice(0, 7)}`);
 };
+actions["delete-rent-payment"] = async ({ id }) => {
+  const pid = Number(id);
+  const snap = await db.loadAll();
+  const cascade = rentPaymentCascade(snap, pid);
+  if (!confirm(total(cascade) ? `Delete this payment and ${describe(cascade)}?` : "Delete this payment?")) return;
+  await deleteCascade(cascade, ["rentPayments", pid]);
+  toast("Payment removed.", "info"); refresh();
+};
+
 /** One tap: the whole outstanding rent was received today. For another date or a part payment, use the form on the rent record. */
 actions["mark-received"] = async ({ id }) => {
   const snap = await db.loadAll();

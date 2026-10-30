@@ -6,6 +6,10 @@
 import glob
 import json
 import os
+import struct
+import zipfile
+import zlib
+import os
 import re
 import subprocess
 import sys
@@ -92,7 +96,7 @@ def sw_ready(pg):
     pg.reload()
     pg.wait_for_function("navigator.serviceWorker.controller !== null", timeout=15000)
     assets = json.loads(re.search(r"const ASSETS = (\[.*?\]);", (PWA / "sw.js").read_text(), re.S).group(1))
-    got = pg.evaluate("caches.keys().then(async k => { const c = await caches.open(k[0]); return (await c.keys()).length })")
+    got = pg.evaluate("caches.keys().then(async ks => { const c = await caches.open(ks.find(k => k.startsWith('home-finance-'))); return (await c.keys()).length })")
     assert got == len(assets)
 
 
@@ -170,7 +174,7 @@ def test_full_workflow_offline_then_backup_erase_restore(page, ctx, tmp_path):
     page.fill("#rent-pay-amount", "3000")
     submit(page, "rent-pay")
     expect(page.locator("#toasts")).to_contain_text("Payment recorded.")
-    assert stat_value(page, "Outstanding") == "₹5,000"
+    expect(page.locator('.stat-card:has-text("Outstanding") .stat-value').first).to_have_text("₹5,000")
     # exact duplicate is refused
     page.fill("#rent-pay-amount", "3000")
     submit(page, "rent-pay")
@@ -365,7 +369,8 @@ def test_old_entries_and_deleting_rooms(page):
     page.fill("#old-rent-receivedAmount", "8000")
     submit(page, "old-rent")
     expect(page.locator("#toasts")).to_contain_text("Rent record added.")
-    assert stat_value(page, "Received") == "\u20b98,000" and stat_value(page, "Outstanding") == "\u20b90"
+    expect(page.locator('.stat-card:has-text("Received") .stat-value').first).to_have_text("\u20b98,000")
+    expect(page.locator('.stat-card:has-text("Outstanding") .stat-value').first).to_have_text("\u20b90")
     go(page, "/rent/new?tenant=1&month=2025-06")
     submit(page, "old-rent")
     expect(page.locator('form[data-form="old-rent"]')).to_contain_text("already a rent record")
@@ -538,3 +543,268 @@ def test_personal_overview_shows_left_after_dues_and_paid_button(page):
     go(page, "/")
     assert stat_value(page, "Left after all dues") == "₹73,151"
     assert page.errors == [], page.errors
+
+
+def test_mark_a_bill_paid_from_the_list_the_bill_and_the_room(page):
+    go(page, "/bills/new?property=2")
+    page.fill("#bill-name", "Light bill")
+    page.fill("#bill-amount", "1450")
+    page.fill("#bill-dueDate", TODAY.isoformat())
+    submit(page, "bill")
+    expect(page.locator("#toasts")).to_contain_text("Bill added.")
+    # a bill the tenant pays has nothing for me to mark paid
+    go(page, "/bills/new?property=2")
+    page.fill("#bill-name", "Tenant water")
+    page.fill("#bill-amount", "300")
+    page.select_option("#bill-responsible", "tenant")
+    submit(page, "bill")
+    expect(page.locator("#toasts")).to_contain_text("Bill added.")
+
+    go(page, "/bills")
+    expect(page.locator('[data-action="pay-due"]')).to_have_count(1)  # only my bill
+    expect(page.locator('tr:has-text("Light bill") [data-action="pay-due"]')).to_be_visible()
+    page.click('tr:has-text("Light bill") [data-action="pay-due"]')
+    expect(page.locator("#toasts")).to_contain_text("marked as paid")
+    expect(page.locator('tr:has-text("Light bill")')).to_contain_text("Paid")
+    expect(page.locator('[data-action="pay-due"]')).to_have_count(0)
+
+    # the bill page agrees: fully paid, one payment, no button
+    page.click('a:has-text("Light bill")')
+    expect(page.locator('.page-actions [data-action="pay-due"]')).to_have_count(0)
+    expect(page.locator("#view")).to_contain_text("₹1,450.00")
+
+    # a second bill: use the button on the room page and on the bill page
+    go(page, "/bills/new?property=2")
+    page.fill("#bill-name", "Gas bill")
+    page.fill("#bill-amount", "800")
+    submit(page, "bill")
+    expect(page.locator("#toasts")).to_contain_text("Bill added.")
+    page.click('.page-actions [data-action="pay-due"]')
+    expect(page.locator("#toasts")).to_contain_text("marked as paid")
+    expect(page.locator('.page-actions [data-action="pay-due"]')).to_have_count(0)
+    go(page, "/properties/2")
+    expect(page.locator('[data-action="pay-due"]')).to_have_count(0)
+    # spending shows it: 1,450 + 800 paid this month
+    go(page, "/")
+    assert stat_value(page, "Property bills") == "₹2,250"
+    assert page.errors == [], page.errors
+
+
+# ---------------------------------------------------------------- receipts
+
+def make_pdf(path, text="Receipt"):
+    path.write_bytes(b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
+                     b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\n% " + text.encode() + b"\ntrailer<</Root 1 0 R>>\n%%EOF\n")
+    return path
+
+
+def make_noise_png(path, w=1600, h=1200):
+    """A big, incompressible 'camera photo' (about 5.7 MB) so we can prove the app shrinks it."""
+    def chunk(tag, data):
+        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+    raw = b"".join(b"\x00" + os.urandom(w * 3) for _ in range(h))
+    path.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw, 1)) + chunk(b"IEND", b""))
+    return path
+
+
+def idb_rows(pg, store):
+    """Read a store straight from IndexedDB (what is really on the phone)."""
+    return pg.evaluate("""(store) => new Promise((resolve, reject) => {
+        const open = indexedDB.open('home-finance');
+        open.onsuccess = () => { const r = open.result.transaction(store).objectStore(store).getAll();
+          r.onsuccess = async () => resolve(await Promise.all(r.result.map(async (x) => x.blob
+            ? { id: x.id, type: x.blob.type, size: x.blob.size, head: Array.from(new Uint8Array(await x.blob.slice(0, 5).arrayBuffer())) } : x)));
+          r.onerror = () => reject(r.error); };
+        open.onerror = () => reject(open.error); })""", store)
+
+
+def add_bill(page, name="Light bill", amount="1450", due="2026-10-24"):
+    go(page, "/bills/new?property=2")
+    page.fill("#bill-name", name)
+    page.fill("#bill-amount", amount)
+    page.fill("#bill-dueDate", due)
+    submit(page, "bill")
+    expect(page.locator("#toasts")).to_contain_text("Bill added.")
+
+
+def test_receipts_attach_shrink_folder_zip_backup_restore(page, tmp_path):
+    pdf = make_pdf(tmp_path / "scan.pdf", "electricity bill")
+    png = make_noise_png(tmp_path / "IMG_2026.png")
+    sw_ready(page)
+
+    # 1) a bill: attach a PDF and a big photo together
+    add_bill(page)
+    page.set_input_files('input[data-file-action="attach"][multiple]', [str(pdf), str(png)])
+    expect(page.locator("#toasts")).to_contain_text("2 receipts added.")
+    expect(page.locator("#view")).to_contain_text("Room2_Electricity_2026-10.pdf")
+    expect(page.locator("#view")).to_contain_text("Room2_Electricity_2026-10_2.jpg")  # PNG became a smaller JPEG
+    stored = {r["id"]: r for r in idb_rows(page, "receiptFiles")}
+    meta = idb_rows(page, "receipts")
+    assert len(meta) == 2 and len(stored) == 2
+    photo = next(m for m in meta if m["mime"] == "image/jpeg")
+    assert photo["size"] < png.stat().st_size / 2, "big photos should be shrunk"
+    assert stored[photo["id"]]["size"] == photo["size"] and stored[photo["id"]]["head"][:2] == [0xFF, 0xD8]  # really a JPEG
+    pdf_meta = next(m for m in meta if m["mime"] == "application/pdf")
+    assert stored[pdf_meta["id"]]["head"] == list(b"%PDF-")
+    assert page.locator("img[data-receipt-thumb]").count() == 1
+    expect(page.locator("img[data-receipt-thumb]")).to_have_js_property("complete", True)
+
+    # 2) refused files: wrong content, wrong type
+    fake = tmp_path / "fake.pdf"; fake.write_text("<html>not a pdf</html>")
+    page.set_input_files('input[data-file-action="attach"][multiple]', str(fake))
+    expect(page.locator("#toasts")).to_contain_text("doesn't look like a real PDF")
+    note = tmp_path / "notes.txt"; note.write_text("hello")
+    page.set_input_files('input[data-file-action="attach"][multiple]', str(note))
+    expect(page.locator("#toasts")).to_contain_text("Only photos")
+    assert len(idb_rows(page, "receipts")) == 2
+
+    # 3) rent payment receipt and a LIC payment receipt
+    go(page, "/properties/2/tenants/new")
+    page.fill("#tenant-name", "Asha Patil"); page.fill("#tenant-monthlyRent", "8000"); page.fill("#tenant-rentDueDay", "1"); page.fill("#tenant-startDate", "2026-01-01")
+    submit(page, "tenant")
+    expect(page.locator("#toasts")).to_contain_text("Tenant added.")
+    month = TODAY.strftime("%Y-%m")
+    go(page, f"/rent/generate?month={month}")
+    page.click('[data-action="create-obligations"]')
+    expect(page.locator("#toasts")).to_contain_text("Created 1 rent record")
+    go(page, f"/rent?month={month}")
+    page.click('[data-action="mark-received"]')
+    expect(page.locator("#toasts")).to_contain_text("₹8,000 marked as received.")
+    page.click('a:has-text("Room 2")')
+    page.set_input_files('input[data-file-action="attach"][multiple]', str(make_pdf(tmp_path / "upi.pdf", "upi")))
+    expect(page.locator("#toasts")).to_contain_text("1 receipt added.")
+    go(page, "/commitments/new?kind=insurance")
+    page.fill("#commitment-name", "LIC Jeevan Anand"); page.fill("#commitment-amount", "12000"); page.select_option("#commitment-frequency", "half_yearly")
+    page.fill("#commitment-nextDueDate", TODAY.isoformat())
+    submit(page, "commitment")
+    expect(page.locator("#toasts")).to_contain_text("added.")
+    submit(page, "commit-pay")
+    expect(page.locator("#toasts")).to_contain_text("Payment recorded.")
+    page.set_input_files('input[data-file-action="attach"][multiple]', str(make_pdf(tmp_path / "lic.pdf", "lic")))
+    expect(page.locator("#toasts")).to_contain_text("1 receipt added.")
+
+    # 4) the Receipts folder view: Room > Category > Year
+    go(page, "/receipts")
+    body = page.locator("#view")
+    for text_ in ("Room 2", "Electricity", "Rent", "Personal", "LIC / Insurance", "Room2_Electricity_2026-10.pdf", f"Room2_Rent_{month}.pdf",
+                  f"Personal_LIC-Jeevan-Anand_{month}.pdf"):
+        expect(body).to_contain_text(text_)
+    page.select_option('[data-filter="category"]', "Rent")
+    expect(page.locator("#view")).not_to_contain_text("Room2_Electricity_2026-10.pdf")
+    expect(page.locator("#view")).to_contain_text(f"Room2_Rent_{month}.pdf")
+    page.select_option('[data-filter="category"]', "")
+
+    # 5) open a photo (new tab with the file) and save one with its clean name
+    with page.context.expect_page() as popup:
+        page.locator('.receipt-row:has-text(".jpg") [data-action="open-receipt"]').first.click()
+    popup.value.wait_for_url(re.compile(r"^blob:"), timeout=8000)  # the file loads into the new tab
+    popup.value.close()
+    with page.expect_download() as dl:
+        page.locator('tr, .receipt-row').filter(has_text="Room2_Electricity_2026-10.pdf").locator('[data-action="download-receipt"]').first.click()
+    assert dl.value.suggested_filename == "Room2_Electricity_2026-10.pdf"
+    dl.value.save_as(tmp_path / "saved.pdf")
+    assert (tmp_path / "saved.pdf").read_bytes() == pdf.read_bytes()
+
+    # 6) "folder" zip: real folders named Room / Category / Year
+    with page.expect_download() as dz:
+        page.click('[data-action="download-folder-zip"]')
+    folder_zip = tmp_path / "folder.zip"; dz.value.save_as(folder_zip)
+    with zipfile.ZipFile(folder_zip) as z:
+        assert z.testzip() is None
+        names = z.namelist()
+        assert "Room 2/Electricity/2026/Room2_Electricity_2026-10.pdf" in names
+        assert f"Room 2/Rent/{TODAY.year}/Room2_Rent_{month}.pdf" in names
+        assert any(n.startswith("Personal/LIC - Insurance/") for n in names)
+        assert z.read("Room 2/Electricity/2026/Room2_Electricity_2026-10.pdf") == pdf.read_bytes()
+
+    # 7) backup is now a zip with the records and every receipt file
+    go(page, "/backup")
+    expect(page.locator("#view")).to_contain_text("receipt files")
+    with page.expect_download() as db_:
+        page.click('[data-action="download-backup"]')
+    assert db_.value.suggested_filename.endswith(".zip")
+    backup_zip = tmp_path / "backup.zip"; db_.value.save_as(backup_zip)
+    with zipfile.ZipFile(backup_zip) as z:
+        assert z.testzip() is None
+        assert "backup.json" in z.namelist() and sum(n.startswith("receipts/") for n in z.namelist()) == 4
+        assert json.loads(z.read("backup.json"))["counts"]["receipts"] == 4
+    before_files = sorted((r["size"], tuple(r["head"])) for r in idb_rows(page, "receiptFiles"))
+
+    # 8) erase everything (files too), then restore from the zip
+    page.click('[data-action="erase-all"]')
+    expect(page.locator("#toasts")).to_contain_text("All data erased.")
+    assert idb_rows(page, "receipts") == [] and idb_rows(page, "receiptFiles") == []
+    go(page, "/backup")
+    page.set_input_files("#restore-file", str(backup_zip))
+    page.click('[data-action="restore-backup"]')
+    expect(page.locator("#toasts")).to_contain_text("Backup restored.")
+    assert sorted((r["size"], tuple(r["head"])) for r in idb_rows(page, "receiptFiles")) == before_files  # byte-identical
+    go(page, "/receipts")
+    expect(page.locator("#view")).to_contain_text("Room2_Electricity_2026-10.pdf")
+    expect(page.locator("img[data-receipt-thumb]")).to_have_js_property("complete", True)
+
+    # 9) a damaged zip is refused and changes nothing
+    broken = tmp_path / "broken.zip"; raw = bytearray(backup_zip.read_bytes()); raw[200] ^= 0xFF; broken.write_bytes(raw)
+    go(page, "/backup")
+    page.set_input_files("#restore-file", str(broken))
+    page.click('[data-action="restore-backup"]')
+    expect(page.locator("#toasts")).to_contain_text("damaged")
+    assert len(idb_rows(page, "receipts")) == 4
+    # a JSON that mentions receipts cannot be restored without the zip
+    with zipfile.ZipFile(backup_zip) as z:
+        (tmp_path / "only.json").write_bytes(z.read("backup.json"))
+    page.set_input_files("#restore-file", str(tmp_path / "only.json"))
+    page.click('[data-action="restore-backup"]')
+    expect(page.locator("#toasts")).to_contain_text(".zip")
+    assert len(idb_rows(page, "receipts")) == 4
+
+    # 10) deleting a bill deletes its receipts (and the prompt says how many)
+    page.once("dialog", lambda d: None)  # (the default handler already accepts)
+    go(page, "/bills")
+    page.click('a:has-text("Light bill")')
+    msgs = []
+    page.on("dialog", lambda d: msgs.append(d.message))
+    page.click('.page-actions [data-action="delete-bill"]')
+    expect(page.locator("#toasts")).to_contain_text("Bill deleted.")
+    assert any("2 receipts" in m for m in msgs), msgs
+    assert len(idb_rows(page, "receipts")) == 2 and len(idb_rows(page, "receiptFiles")) == 2
+    # one receipt on its own
+    go(page, "/receipts")
+    page.locator('[data-receipt-row]').first.locator('[data-action="delete-receipt"]').click()
+    expect(page.locator("#toasts")).to_contain_text("Receipt deleted.")
+    assert len(idb_rows(page, "receipts")) == 1 and len(idb_rows(page, "receiptFiles")) == 1
+    assert page.errors == [], page.errors
+
+
+def test_android_share_target_inbox(page, tmp_path):
+    sw_ready(page)
+    add_bill(page)
+    # what Android does when you tap Share -> Home Finance: POST the file to the share URL
+    pdf_bytes = make_pdf(tmp_path / "shared.pdf", "from whatsapp").read_bytes()
+    result = page.evaluate("""async (bytes) => {
+        const fd = new FormData();
+        fd.append('title', 'Bill'); fd.append('files', new File([new Uint8Array(bytes)], 'WhatsApp Document.pdf', { type: 'application/pdf' }));
+        const res = await fetch('./share-target', { method: 'POST', body: fd, redirect: 'manual' });
+        return { type: res.type, caches: await caches.keys() }; }""", list(pdf_bytes))
+    assert result["type"] == "opaqueredirect" and "hf-inbox" in result["caches"]
+    page.reload()
+    expect(page.locator("#toasts")).to_contain_text("1 file received")
+    go(page, "/receipts")
+    expect(page.locator("#view")).to_contain_text("Inbox")
+    expect(page.locator("#view")).to_contain_text("waiting to be attached")
+    assert page.evaluate("caches.open('hf-inbox').then(c => c.keys()).then(k => k.length)") == 0  # moved into the phone's storage
+    # attach it to the bill
+    page.click('[data-action="attach-inbox"]')
+    expect(page.locator("#toasts")).to_contain_text("Choose what")
+    page.select_option("select[data-inbox-for]", index=1)
+    page.click('[data-action="attach-inbox"]')
+    expect(page.locator("#toasts")).to_contain_text("Receipt attached.")
+    expect(page.locator("#view")).not_to_contain_text("waiting to be attached")
+    expect(page.locator("#view")).to_contain_text("Room2_Electricity_2026-10.pdf")
+    # an image/odd file shared by mistake is refused and does not pile up
+    page.evaluate("""async () => { const fd = new FormData(); fd.append('files', new File(['<b>x</b>'], 'x.html', { type: 'text/html' }));
+        await fetch('./share-target', { method: 'POST', body: fd, redirect: 'manual' }); }""")
+    page.reload()
+    expect(page.locator("#toasts")).to_contain_text("Only photos")
+    assert page.evaluate("caches.open('hf-inbox').then(c => c.keys()).then(k => k.length)") == 0
+    assert len(idb_rows(page, "receipts")) == 1

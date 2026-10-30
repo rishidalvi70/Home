@@ -93,7 +93,7 @@ textarea.form-control { min-height: 0; }
 .nav-pills .nav-link { border-radius: 999px; }
 .nav-pills .nav-link.active { background: var(--brand); }
 .chart-box { position: relative; height: 280px; }
-.filter-bar { display: flex; flex-wrap: wrap; gap: .6rem; align-items: end; }
+.filter-bar { display: flex; flex-direction: row; flex-wrap: wrap; gap: .6rem; align-items: end; } /* row: it also sits inside .card, which is a column */
 .filter-bar > * { min-width: 9rem; flex: 1 1 9rem; max-width: 16rem; }
 .login-wrap { min-height: 80vh; display: flex; align-items: center; justify-content: center; }
 .login-card { width: 100%; max-width: 420px; }
@@ -105,3 +105,9 @@ textarea.form-control { min-height: 0; }
 .page-banners > [hidden] { display: none !important; }
 .topbar { padding-top: calc(.5rem + env(safe-area-inset-top)); }
 .page { padding-bottom: calc(1.25rem + env(safe-area-inset-bottom)); }
+
+/* Receipts */
+.receipt-thumb { width: 48px; height: 48px; flex: 0 0 48px; object-fit: cover; border-radius: 10px; border: 1px solid var(--bs-border-color); background: var(--bs-secondary-bg); }
+.receipt-pdf { display: inline-flex; align-items: center; justify-content: center; font-size: 1.6rem; color: #dc3545; }
+.receipt-row + .receipt-row { border-top: 1px solid var(--bs-border-color); }
+.text-break { overflow-wrap: anywhere; }

@@ -4,11 +4,12 @@ import { billStatus } from "../domain/bills.js";
 import { obReceived, obStatus, buildRevision, revisionChange, revisionPercent, suggestedNewRent, rentFor } from "../domain/rent.js";
 import { describe, propertyCascade, propertyKind, tenantCascade, total } from "../domain/cascade.js";
 import { propertyReport } from "../domain/reports.js";
+import { deleteCascade } from "../cascadeDelete.js";
 import { fyStart, formatDate, monthStart, todayISO } from "../lib/dates.js";
 import { html } from "../lib/html.js";
 import { inr } from "../lib/money.js";
 import { FieldErrors, actions, formHtml, navigate, refresh, toast } from "../ui/core.js";
-import { actionBtn, badge, card, empty, kv, pageHeader, responsive } from "./common.js";
+import { actionBtn, badge, card, empty, kv, pageHeader, paidButton, responsive } from "./common.js";
 
 const text = (name, label, extra = {}) => ({ name, label, type: "text", max: 200, ...extra });
 const area = (name, label) => ({ name, label, type: "textarea", max: 4000 });
@@ -160,7 +161,7 @@ export async function detail({ params, query }) {
         : html`<div class="card-body">${empty("No rent generated yet. Use Rent → Generate.")}</div>`, "h-100")}</div>
     <div class="col-12 col-xl-6">${card(html`<div class="d-flex justify-content-between align-items-center"><span>Recent bills</span><a class="btn btn-sm btn-outline-primary" href="#/bills/new?property=${id}"><i class="bi bi-plus-lg"></i> Add bill</a></div>`,
       bills.length ? responsive(html`<table class="table"><thead><tr><th>Bill</th><th>Amount</th><th>Who pays</th><th>Status</th></tr></thead><tbody>
-        ${bills.map((b) => html`<tr><td><a href="#/bills/${b.id}">${b.name}</a><div class="small text-muted">${L.category[b.category]}${b.billNumber ? ` · #${b.billNumber}` : ""}</div></td><td>${inr(b.amount)}</td><td>${L.responsible[b.responsible]}</td><td>${badge(billStatus(b, snap.billPayments, today))}</td></tr>`)}</tbody></table>`)
+        ${bills.map((b) => html`<tr><td><a href="#/bills/${b.id}">${b.name}</a><div class="small text-muted">${L.category[b.category]}${b.billNumber ? ` · #${b.billNumber}` : ""}</div>${paidButton(b, snap.billPayments)}</td><td>${inr(b.amount)}</td><td>${L.responsible[b.responsible]}</td><td>${badge(billStatus(b, snap.billPayments, today))}</td></tr>`)}</tbody></table>`)
         : html`<div class="card-body">${empty("No bills recorded for this room.")}</div>`, "h-100")}</div>
   </div>`;
   return { title: prop.name, html: body };
@@ -259,11 +260,7 @@ actions["delete-property"] = async ({ id }) => {
     const typed = prompt(`Delete "${prop.name}" and ALL its records: ${describe(cascade)}?\n\nThis can't be undone. (Tip: Archive keeps the history and hides the room. Download a backup first if unsure.)\n\nType DELETE to confirm.`);
     if (typed !== "DELETE") { toast("Nothing was deleted.", "info"); return; }
   }
-  await db.batch(["properties", "connections", "tenants", "revisions", "obligations", "rentPayments", "bills", "billPayments"], async (tx) => {
-    for (const [store, list] of [["billPayments", cascade.billPayments], ["bills", cascade.bills], ["rentPayments", cascade.rentPayments], ["obligations", cascade.obligations],
-      ["revisions", cascade.revisions], ["tenants", cascade.tenants], ["connections", cascade.connections]]) for (const x of list) await tx.remove(store, x);
-    await tx.remove("properties", pid);
-  });
+  await deleteCascade(cascade, ["properties", pid]);
   toast(`${prop.name} deleted.`, "info"); navigate("/properties");
 };
 actions["delete-connection"] = async ({ id }) => {
@@ -290,10 +287,7 @@ actions["delete-tenant"] = async ({ id }) => {
     const typed = prompt(`Delete ${t.name} and their records: ${describe(cascade)}?\n\nThis can't be undone. (To keep the history, use "End tenancy" instead.)\n\nType DELETE to confirm.`);
     if (typed !== "DELETE") { toast("Nothing was deleted.", "info"); return; }
   }
-  await db.batch(["tenants", "revisions", "obligations", "rentPayments"], async (tx) => {
-    for (const [store, list] of [["rentPayments", cascade.rentPayments], ["obligations", cascade.obligations], ["revisions", cascade.revisions]]) for (const x of list) await tx.remove(store, x);
-    await tx.remove("tenants", tid);
-  });
+  await deleteCascade(cascade, ["tenants", tid]);
   toast("Tenant deleted.", "info"); refresh();
 };
 actions["delete-revision"] = async ({ id }) => {

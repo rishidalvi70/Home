@@ -1,7 +1,7 @@
 // All data lives in the browser's IndexedDB on this device. Nothing is sent anywhere.
-import { INITIAL_MEMBERS, INITIAL_PROPERTIES, SCHEMA_VERSION, STORES } from "./constants.js";
+import { FILE_STORE, INITIAL_MEMBERS, INITIAL_PROPERTIES, SCHEMA_VERSION, STORES } from "./constants.js";
 
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const REQUIRED = {
   properties: ["name"], connections: ["propertyId", "kind"], tenants: ["propertyId", "name", "monthlyRent"],
@@ -10,8 +10,9 @@ const REQUIRED = {
   rentPayments: ["obligationId", "amount", "paidOn"], bills: ["propertyId", "category", "name", "amount", "responsible"],
   billPayments: ["billId", "amount", "paidOn"], commitments: ["kind", "name", "amount", "frequency"],
   commitmentPayments: ["commitmentId", "amount", "paidOn"], income: ["receivedOn", "amount"],
-  expenses: ["spentOn", "amount"], investments: ["name"], members: ["name"],
+  expenses: ["spentOn", "amount"], investments: ["name"], members: ["name"], receipts: ["filename", "mime", "size"],
 };
+const RECEIPT_OWNERS = { bill: "bills", rentPayment: "rentPayments", commitmentPayment: "commitmentPayments" };
 const MONEY_FIELDS = new Set(["amount", "monthlyRent", "oldRent", "newRent", "expectedAmount", "ownerShare",
   "securityDeposit", "totalAmount", "invested", "investedAmount", "currentValue"]);
 const PARENTS = {
@@ -43,6 +44,7 @@ export function createDB(name = "home-finance") {
     req.onupgradeneeded = () => {
       const d = req.result;
       for (const s of STORES) if (!d.objectStoreNames.contains(s)) d.createObjectStore(s, { keyPath: "id", autoIncrement: true });
+      if (!d.objectStoreNames.contains(FILE_STORE)) d.createObjectStore(FILE_STORE, { keyPath: "id" }); // id = the receipt's id
       if (!d.objectStoreNames.contains("meta")) d.createObjectStore("meta", { keyPath: "key" });
     };
     req.onsuccess = () => resolve(req.result);
@@ -75,6 +77,16 @@ export function createDB(name = "home-finance") {
       };
       try { await fn(tools); } catch (e) { try { tx.abort(); } catch {} throw e; }
       await done(tx);
+    },
+
+    /** A receipt file's bytes, or null. */
+    async getFile(id) { const d = await open(); const r = await wrap(d.transaction(FILE_STORE).objectStore(FILE_STORE).get(id)); return r ? r.blob : null; },
+    /** Every receipt file, for the zip backup: [{id, blob}] */
+    async allFiles() { const d = await open(); return wrap(d.transaction(FILE_STORE).objectStore(FILE_STORE).getAll()); },
+    async fileStats() {
+      const d = await open();
+      const rows = await wrap(d.transaction(FILE_STORE).objectStore(FILE_STORE).getAll());
+      return { count: rows.length, bytes: rows.reduce((n, r) => n + (r.blob?.size || 0), 0) };
     },
 
     async loadAll() {
@@ -113,23 +125,30 @@ export function createDB(name = "home-finance") {
     },
 
     /** Replace everything with a backup. All-or-nothing: any problem leaves current data untouched. */
-    async importBackup(backup) {
+    async importBackup(backup, files = null) {
       const rows = validateBackup(backup);
+      if (rows.receipts.length) {
+        if (!files) throw new BackupError("This backup includes receipts, so choose the .zip file (the .json inside it can't restore the receipt files).");
+        for (const r of rows.receipts) if (!(files.get(r.id) instanceof Blob)) throw new BackupError(`A receipt file is missing from the backup (${r.filename}).`);
+      }
       const d = await open();
-      const tx = d.transaction([...STORES, "meta"], "readwrite");
+      const tx = d.transaction([...STORES, FILE_STORE, "meta"], "readwrite");
       for (const s of STORES) {
         const os = tx.objectStore(s);
         os.clear();
         for (const row of rows[s]) os.put(row);
       }
+      tx.objectStore(FILE_STORE).clear();
+      for (const r of rows.receipts) tx.objectStore(FILE_STORE).put({ id: r.id, blob: files.get(r.id) });
       tx.objectStore("meta").put({ key: "seeded", value: true });
       await done(tx);
     },
 
     async wipeAll() {
       const d = await open();
-      const tx = d.transaction([...STORES, "meta"], "readwrite");
+      const tx = d.transaction([...STORES, FILE_STORE, "meta"], "readwrite");
       for (const s of STORES) tx.objectStore(s).clear();
+      tx.objectStore(FILE_STORE).clear();
       tx.objectStore("meta").put({ key: "seeded", value: true }); // an erased app stays empty
       await done(tx);
     },
@@ -160,7 +179,14 @@ export function validateBackup(b) {
     }
     rows[s] = list;
   }
+  for (const r of rows.receipts) {
+    if (!Number.isInteger(r.size) || r.size < 0) throw new BackupError(`A receipt has an invalid size (${r.filename}).`);
+    if (r.ownerType != null && !RECEIPT_OWNERS[r.ownerType]) throw new BackupError(`A receipt belongs to an unknown kind of record (${r.filename}).`);
+  }
   const idSet = (s) => new Set(rows[s].map((r) => r.id));
+  for (const r of rows.receipts) {
+    if (r.ownerType != null && !idSet(RECEIPT_OWNERS[r.ownerType]).has(r.ownerId)) throw new BackupError(`A receipt points to a missing record (${r.filename}).`);
+  }
   for (const [store, links] of Object.entries(PARENTS))
     for (const [field, parent] of Object.entries(links)) {
       const ok = idSet(parent);

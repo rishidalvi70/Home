@@ -2,11 +2,13 @@ import { db } from "../db.js";
 import { BILL_CATEGORIES, L, RESPONSIBLE, TENANT_PAYMENT_STATES } from "../constants.js";
 import { billOutstanding, billPaid, billStatus, myShare } from "../domain/bills.js";
 import { billCascade, describe, total } from "../domain/cascade.js";
+import { deleteCascade } from "../cascadeDelete.js";
+import { hydrateThumbs, receiptsPanel } from "./receipts.js";
 import { formatDate, todayISO } from "../lib/dates.js";
 import { html } from "../lib/html.js";
 import { inr, sum } from "../lib/money.js";
 import { actions, formHtml, navigate, refresh, toast } from "../ui/core.js";
-import { actionBtn, badge, byId, card, empty, kv, optionsOf, pageHeader, responsive, stat, tableCard } from "./common.js";
+import { actionBtn, badge, byId, card, empty, kv, optionsOf, pageHeader, paidButton, responsive, stat, tableCard } from "./common.js";
 import { notFound } from "./properties.js";
 import { paymentSpec } from "./payments.js";
 
@@ -36,7 +38,7 @@ export async function list({ query }) {
       <div class="col-4">${stat("Paid by me", inr(sum(bills, (b) => billPaid(b, snap.billPayments))), "check2-circle", "success")}</div>
       <div class="col-4">${stat("Still to pay", inr(sum(bills, (b) => billOutstanding(b, snap.billPayments))), "hourglass-split", "danger")}</div></div>
     ${tableCard(bills.length ? responsive(html`<table class="table table-hover"><thead><tr><th>Bill</th><th>Room</th><th>Due</th><th>Amount</th><th>Who pays</th><th>I paid</th><th>Status</th></tr></thead><tbody>
-      ${bills.map((b) => html`<tr><td><a href="#/bills/${b.id}">${b.name}</a><div class="small text-muted">${L.category[b.category]}${b.billNumber ? ` · #${b.billNumber}` : ""}${b.periodLabel ? ` · ${b.periodLabel}` : ""}</div></td>
+      ${bills.map((b) => html`<tr><td><a href="#/bills/${b.id}">${b.name}</a><div class="small text-muted">${L.category[b.category]}${b.billNumber ? ` · #${b.billNumber}` : ""}${b.periodLabel ? ` · ${b.periodLabel}` : ""}</div>${paidButton(b, snap.billPayments)}</td>
         <td>${props.get(b.propertyId)?.name}</td><td>${formatDate(b.dueDate)}</td><td>${inr(b.amount)}</td>
         <td>${L.responsible[b.responsible]}${["tenant", "other"].includes(b.responsible) && b.tenantPaymentState !== "not_reported" ? html`<div class="small text-muted">${b.tenantPaymentState.replace("_", " ")}</div>` : ""}</td>
         <td>${inr(billPaid(b, snap.billPayments))}</td><td>${badge(status(b))}</td></tr>`)}</tbody></table>`)
@@ -100,9 +102,9 @@ export async function editBill({ params }) {
     async onSubmit(v) { await db.put("billPayments", { billId: id, amount: v.amount, paidOn: v.paidOn, method: v.method, reference: v.reference, notes: v.notes }); toast("Payment recorded."); refresh(); } });
   const canPay = myShare(bill) > 0 && !bill.isCancelled;
   return { title: bill.name, html: html`${pageHeader(bill.name, `${props.get(bill.propertyId)?.name} · ${L.category[bill.category]}`, html`
-      <a class="btn btn-outline-secondary" href="#/bills"><i class="bi bi-arrow-left"></i> All bills</a>${actionBtn("delete-bill", "Delete", { id }, "btn btn-outline-danger", "trash")}`)}
-    <div class="row g-3"><div class="col-12 col-xl-7"><div class="card"><div class="card-body">${formHtml(billSpec(snap, bill))}</div></div></div>
-    <div class="col-12 col-xl-5">
+      <a class="btn btn-outline-secondary" href="#/bills"><i class="bi bi-arrow-left"></i> All bills</a>${out > 0 ? actionBtn("pay-due", `Mark ${inr(out)} paid`, { type: "bill", id }, "btn btn-success", "check2") : ""}${actionBtn("delete-bill", "Delete", { id }, "btn btn-outline-danger", "trash")}`)}
+    <div class="row g-3"><div class="col-12 col-xl-7 order-2 order-xl-1"><div class="card"><div class="card-body">${formHtml(billSpec(snap, bill))}</div></div></div>
+    <div class="col-12 col-xl-5 order-1 order-xl-2">
       <div class="mb-3">${card(html`Status ${badge(status)}`, html`<div class="card-body">${kv([
         ["Bill amount", inr(bill.amount, 2)],
         ["My share", html`${inr(myShare(bill), 2)}${["tenant", "other"].includes(bill.responsible) ? html` <span class="text-muted small">(not mine – won't count as my spending)</span>` : ""}`],
@@ -110,7 +112,8 @@ export async function editBill({ params }) {
       <div class="mb-3">${card("My payments", pays.length ? responsive(html`<table class="table"><tbody>${pays.map((p) => html`<tr><td>${formatDate(p.paidOn)}<div class="small text-muted">${p.method || ""} ${p.reference || ""}</div></td><td>${inr(p.amount, 2)}</td>
         <td class="text-end">${actionBtn("delete-bill-payment", "Delete", { id: p.id })}</td></tr>`)}</tbody></table>`)
         : html`<div class="card-body">${empty("Nothing paid yet. A due date passing never marks a bill paid.")}</div>`)}</div>
-      ${canPay ? card("Record a payment", html`<div class="card-body">${formHtml(paySpec)}</div>`) : ""}</div></div>` };
+      <div class="mb-3">${card("Receipts", html`<div class="card-body"><p class="small text-muted">The bill itself and/or the proof of payment (photo or PDF).</p>${receiptsPanel(snap, "bill", id)}</div>`)}</div>
+      ${canPay ? card("Record a payment", html`<div class="card-body">${formHtml(paySpec)}</div>`) : ""}</div></div>`, after: (root) => hydrateThumbs(root) };
 }
 
 actions["delete-bill"] = async ({ id }) => {
@@ -118,7 +121,7 @@ actions["delete-bill"] = async ({ id }) => {
   const snap = await db.loadAll();
   const cascade = billCascade(snap, bid);
   if (!confirm(total(cascade) ? `Delete this bill and ${describe(cascade)}? This can't be undone. (Mark it Cancelled instead to keep it on record.)` : "Delete this bill?")) return;
-  await db.batch(["bills", "billPayments"], async (tx) => { for (const x of cascade.billPayments) await tx.remove("billPayments", x); await tx.remove("bills", bid); });
+  await deleteCascade(cascade, ["bills", bid]);
   toast("Bill deleted.", "info"); navigate("/bills");
 };
 actions["delete-bill-payment"] = async ({ id }) => {
